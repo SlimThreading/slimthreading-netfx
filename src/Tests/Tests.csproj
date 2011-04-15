@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{DE409BCA-E40E-42AA-95DD-ECEDEA3086A9}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Tests</RootNamespace>
+    <AssemblyName>Tests</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Test.cs" />
+    <Compile Include="TestBarrier.cs" />
+    <Compile Include="TestBlockingQueue.cs" />
+    <Compile Include="TestExchanger.cs" />
+    <Compile Include="TestFairLock.cs" />
+    <Compile Include="TestInitOnceLock.cs" />
+    <Compile Include="TestLock.cs" />
+    <Compile Include="TestMonitor.cs" />
+    <Compile Include="TestMultipleQueues.cs" />
+    <Compile Include="TestNotificationEvent.cs" />
+    <Compile Include="TestNotificationEventBase.cs" />
+    <Compile Include="TestReadUpgradeWriteLock.cs" />
+    <Compile Include="TestReadWriteLock.cs" />
+    <Compile Include="TestReentrantFairLock.cs" />
+    <Compile Include="TestReentrantLock.cs" />
+    <Compile Include="TestReentrantReadWriteLock.cs" />
+    <Compile Include="TestRegisteredTake.cs" />
+    <Compile Include="TestRegisteredWait.cs" />
+    <Compile Include="TestRendezvousChannel.cs" />
+    <Compile Include="TestSemaphore.cs" />
+    <Compile Include="TestSemaphores.cs" />
+    <Compile Include="TestStreamBlockingQueue.cs" />
+    <Compile Include="TestSynchronizationEvent.cs" />
+    <Compile Include="TestTimer.cs" />
+    <Compile Include="VConsole.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SlimThreading\SlimThreading.csproj">
+      <Project>{2D49099A-7DC6-439F-ADD4-80CA26CFC18A}</Project>
+      <Name>SlimThreading</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{2D49099A-7DC6-439F-ADD4-80CA26CFC18A}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>SlimThreading</RootNamespace>
+    <AssemblyName>SlimThreading</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Alerter.cs" />
+    <Compile Include="ArrayBlockingQueue.cs" />
+    <Compile Include="Barrier.cs" />
+    <Compile Include="BlockingQueue.cs" />
+    <Compile Include="BoundedBlockingQueue.cs" />
+    <Compile Include="CancelArgs.cs" />
+    <Compile Include="ConditionVariable.cs" />
+    <Compile Include="CountDownEvent.cs" />
+    <Compile Include="Exceptions.cs" />
+    <Compile Include="Exchanger.cs" />
+    <Compile Include="FairLock.cs" />
+    <Compile Include="Future.cs" />
+    <Compile Include="InitOnceLock.cs" />
+    <Compile Include="LazyInitializer.cs" />
+    <Compile Include="Lock.cs" />
+    <Compile Include="Mutant.cs" />
+    <Compile Include="NativeMethods.cs" />
+    <Compile Include="NotificationEvent.cs" />
+    <Compile Include="Parker.cs" />
+    <Compile Include="ParkSpot.cs" />
+    <Compile Include="ParkStatus.cs" />
+    <Compile Include="Platform.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ReadUpgradeWriteLock.cs" />
+    <Compile Include="ReadWriteLock.cs" />
+    <Compile Include="ReentrantFairLock.cs" />
+    <Compile Include="ReentrantLock.cs" />
+    <Compile Include="ReentrantReadWriteLock.cs" />
+    <Compile Include="RegisteredTake.cs" />
+    <Compile Include="RegisteredWait.cs" />
+    <Compile Include="RendezvousChannel.cs" />
+    <Compile Include="Semaphore.cs" />
+    <Compile Include="SpinLock.cs" />
+    <Compile Include="SpinWait.cs" />
+    <Compile Include="StreamBlockingQueue.cs" />
+    <Compile Include="SynchronizationEvent.cs" />
+    <Compile Include="Timer.cs" />
+    <Compile Include="TimerList.cs" />
+    <Compile Include="UnboundedBlockingQueue.cs" />
+    <Compile Include="Waitable.cs" />
+    <Compile Include="WaitBlock.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
