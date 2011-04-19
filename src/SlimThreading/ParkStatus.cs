@@ -13,12 +13,8 @@
 // limitations under the License.
 //  
 using System;
-using System.Threading;
-
-#pragma warning disable 0420
 
 namespace SlimThreading {
-
 
     //
     // Integer values used as park wait status.
