@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
-namespace Standard {
+namespace Tests {
     class Test {
         static void Main() {
             Thread.CurrentThread.Priority = ThreadPriority.Highest;
             Action stop;
 
-            stop = TestShared.TestBarrier.Run();
+            //stop = TestShared.TestBarrier.Run();
             //stop = TestShared.TestBlockingQueue.Run();
             //stop = TestShared.TestCancellationToken.Run();
             //stop = TestShared.TestExchanger.Run();
@@ -47,11 +48,14 @@ namespace Standard {
             //stop = TestShared.TestSynchronizationEvent.Run();
             //stop = TestShared.TestTimer.Run();
 
-            VConsole.WriteLine("+++ hit <enter> to terminate...");
-            Console.ReadLine();
-            stop();
-            VConsole.Write("+++hit <enter> to exit...");
-            Console.ReadLine();
+            //VConsole.WriteLine("+++ hit <enter> to terminate...");
+            //Console.ReadLine();
+            //stop();
+            //VConsole.Write("+++hit <enter> to exit...");
+            //Console.ReadLine();
+
+            //ExchangerTest.Run();
+            ExchangerAsyncTest.Run();
         }
     }
 }

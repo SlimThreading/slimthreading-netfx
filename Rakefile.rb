@@ -14,7 +14,7 @@ end
 desc "Compiles the library"
 msbuild :compile => [:clean] do |msb|
   msb.properties :configuration => CONFIGURATION
-  msb.targets :Build
+  msb.targets :Clean, :Build
   msb.solution = SOLUTION
 end
 
