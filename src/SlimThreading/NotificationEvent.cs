@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -35,7 +36,7 @@ namespace SlimThreading {
 
         //
         // The state of the event and the event's queue (i.e., a non-blocking
-        // stack) is store on the *state* field, as follows:
+        // stack) is stored on the *state* field, as follows:
         // - *state* == SET: the event is signalled;
         // - *state* == null: the event is non-signalled the queue is empty;
         // - *state* != null && *state* != SET: the event is non-signalled
@@ -60,7 +61,7 @@ namespace SlimThreading {
             spinCount = Platform.IsMultiProcessor ? sc : 0;
         }
 
-        internal NotificationEvent(bool initialState) : this(initialState, 0) {}
+        internal NotificationEvent(bool initialState) : this(initialState, 0) { }
 
         //
         // Sets the event to the signalled state.
@@ -77,13 +78,13 @@ namespace SlimThreading {
             }
 
             //
-            // Atomically, signals the event and grab the event's wait queue.
+            // Atomically signal the event and grab the wait queue.
             //
 
-            WaitBlock p = Interlocked.Exchange<WaitBlock>(ref state, SET);
+            WaitBlock p = Interlocked.Exchange(ref state, SET);
 
             //
-            // If the event's queue is empty, return the previous state of the event.
+            // If the event queue is empty, return the previous state of the event.
             //
 
             if (p == null || p == SET) {
@@ -91,23 +92,14 @@ namespace SlimThreading {
             }
 
             //
-            // If spinning is configured and there are more than one thread in the
-            // wait queue, release first the thread that is spinning.
+            // If spinning is configured and there is more than one thread in the
+            // wait queue, we first release the thread that is spinning. As only 
+            // one thread spins, we maximize the chances of unparking that thread
+            // before it blocks.
             //
- 
-            StParker pk;
+
             if (spinCount != 0 && p.next != null) {
-                WaitBlock pv = p, n;
-                while ((n = pv.next) != null && n.next != null) {
-                    pv = n;
-                    n = n.next;
-                }
-                if (n != null) {
-                    pv.next = null;
-                    if ((pk = n.parker).TryLock()) {
-                        pk.Unpark(n.waitKey);
-                    }
-                }
+                p.RemoveLast().TryLockAndUnpark();
             }
 
             //
@@ -115,9 +107,7 @@ namespace SlimThreading {
             //
 
             do {
-                if ((pk = p.parker).TryLock()) {
-                    pk.Unpark(p.waitKey);
-                }
+                p.TryLockAndUnpark();
             } while ((p = p.next) != null);
 
             //
@@ -132,9 +122,7 @@ namespace SlimThreading {
         //
 
         internal bool Reset() {
-            return (state == SET &&
-                    Interlocked.CompareExchange<WaitBlock>(ref state, null,
-                                                           SET) == SET);
+            return state == SET && Interlocked.CompareExchange(ref state, null, SET) == SET;
         }
 
         //
@@ -142,7 +130,7 @@ namespace SlimThreading {
         //
 
         internal bool IsSet {
-            get { return (state == SET); }
+            get { return state == SET; }
         }
 
         //
@@ -150,10 +138,9 @@ namespace SlimThreading {
         //
 
         internal int Wait(StCancelArgs cargs) {
-            if (state == SET) {
-                return StParkStatus.Success;
-            }
-            return (cargs.Timeout != 0) ? SlowWait(cargs) : StParkStatus.Success;
+            return state == SET ? StParkStatus.Success
+                 : cargs.Timeout == 0 ? StParkStatus.Timeout
+                 : SlowWait(cargs);
         }
 
         //
@@ -167,7 +154,7 @@ namespace SlimThreading {
             do {
 
                 //
-                // if the event is now signalled, return success.
+                // If the event is now signalled, return success.
                 //
 
                 WaitBlock s;
@@ -176,35 +163,36 @@ namespace SlimThreading {
                 }
 
                 //
-                // The event is non-signalled. So, if this is the first loop iteraction create
-                // a wait block with a parker and try to insert it in the event's wait queue but
-                // only if it remains non-signalled.
+                // The event is non-signalled. So, if this is the first iteration create
+                // a wait block with a parker and try to insert it in the event's wait
+                // queue, if it remains non-signalled.
                 //
 
                 if (wb == null) {
                     wb = new WaitBlock(WaitType.WaitAny);
                 }
                 wb.next = s;
-                if (Interlocked.CompareExchange<WaitBlock>(ref state, wb, s) == s) {
+                if (Interlocked.CompareExchange(ref state, wb, s) == s) {
                     break;
                 }
             } while (true);
 
             //
-            // Park the current thread, activating the specified cancellers and spinning,
+            // Park the current thread, activating the specified cancellers and spinning
             // if appropriate.
             //
 
-            int ws = wb.parker.Park((wb.next == null) ? spinCount : 0, cargs);
+            int ws = wb.parker.Park(wb.next == null ? spinCount : 0, cargs);
 
             //
-            // if the wait was cancelled, unlink the wait block from the
-            // event's queue; anyway, return the wait status.
+            // If the wait was cancelled, unlink the wait block from the
+            // event's queue.
             //
 
             if (ws != StParkStatus.Success) {
                 Unlink(wb);
             }
+
             return ws;
         }
 
@@ -216,12 +204,12 @@ namespace SlimThreading {
         private void SlowUnlink(WaitBlock wb) {
 
             //
-            // Absorb cancelled wait blocks at top of the stack.
+            // Absorb cancelled wait blocks atop the stack.
             //
 
             WaitBlock p;
-            do {
-
+            do
+            {
                 //
                 // If the stack is empty, return.
                 //
@@ -229,13 +217,13 @@ namespace SlimThreading {
                 if ((p = state) == null || p == SET) {
                     return;
                 }
-                if (p.parker.IsLocked) {
-                    if (Interlocked.CompareExchange<WaitBlock>(ref state, p.next, p) == p &&
-                        p == wb) {
-                        return;
-                    }
-                } else {
+
+                if (!p.parker.IsLocked) {
                     break;
+                }
+
+                if (Interlocked.CompareExchange(ref state, p.next, p) == p && p == wb) {
+                    return;
                 }
             } while (true);
 
@@ -329,13 +317,13 @@ namespace SlimThreading {
             }
 
             //
-            // Atomically signal the event and grab the event's wait queue.
+            // Atomically signal the event and grab the wait queue.
             //
 
-            WaitBlock p = Interlocked.Exchange<WaitBlock>(ref state, SET);
+            WaitBlock p = Interlocked.Exchange(ref state, SET);
 
             //
-            // If the event's queue is empty, return the previous state of the latch.
+            // If the event queue is empty, return the previous state of the latch.
             //
 
             if (p == null || p == SET) {
@@ -343,7 +331,7 @@ namespace SlimThreading {
             }
 
             //
-            // If spinning is configured and there are more than one thread in
+            // If spinning is configured and there is more than one thread in
             // the wait queue, we release first the thread that is spinning.
             //
 
@@ -384,8 +372,7 @@ namespace SlimThreading {
         //
 
         protected bool InternalReset() {
-            return (state == SET &&
-                    Interlocked.CompareExchange<WaitBlock>(ref state, null, SET) == SET);
+            return state == SET && Interlocked.CompareExchange(ref state, null, SET) == SET;
         }
 
         //
@@ -393,7 +380,7 @@ namespace SlimThreading {
         //
 
         protected bool InternalIsSet {
-            get { return (state == SET); }
+            get { return state == SET; }
         }
 
         //
@@ -401,13 +388,9 @@ namespace SlimThreading {
         //
 
         protected int InternalWait(StCancelArgs cargs) {
-            if (state == SET) {
-                return StParkStatus.Success;
-            }
-            if (cargs.Timeout == 0) {
-                return StParkStatus.Timeout;
-            }
-            return SlowWait(cargs);
+            return state == SET ? StParkStatus.Success
+                 : cargs.Timeout == 0 ? StParkStatus.Timeout
+                 : SlowWait(cargs);
         }
 
         //
@@ -428,16 +411,16 @@ namespace SlimThreading {
                 }
 
                 //
-                // The event is non-signalled. So, if this is the first loop iteraction create
+                // The event is non-signalled. So, if this is the first iteration create
                 // a wait block with a parker and try to insert it in the event's wait
-                // queue but only if it remains non-signalled.
+                // queue, if it remains non-signalled.
                 //
 
                 if (wb == null) {
                     wb = new WaitBlock(WaitType.WaitAny);
                 }
                 wb.next = s;
-                if (Interlocked.CompareExchange<WaitBlock>(ref state, wb, s) == s) {
+                if (Interlocked.CompareExchange(ref state, wb, s) == s) {
                     break;
                 }
             } while (true);
@@ -561,7 +544,7 @@ namespace SlimThreading {
             WaitBlock s;
             if ((s = state) == SET ||
                 (wb.next == null && s == wb &&
-                 Interlocked.CompareExchange<WaitBlock>(ref state, null, s) == s)) {
+                 Interlocked.CompareExchange(ref state, null, s) == s)) {
                 return;
             }
             SlowUnlink(wb);

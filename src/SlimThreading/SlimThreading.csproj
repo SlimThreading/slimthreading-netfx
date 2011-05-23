@@ -51,7 +51,6 @@
     <Compile Include="LazyInitializer.cs" />
     <Compile Include="Lock.cs" />
     <Compile Include="Mutant.cs" />
-    <Compile Include="NativeMethods.cs" />
     <Compile Include="NotificationEvent.cs" />
     <Compile Include="Parker.cs" />
     <Compile Include="ParkSpot.cs" />
@@ -76,6 +75,7 @@
     <Compile Include="UnboundedBlockingQueue.cs" />
     <Compile Include="Waitable.cs" />
     <Compile Include="WaitBlock.cs" />
+    <Compile Include="WaitBlockExtensions.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
