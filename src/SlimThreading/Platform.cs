@@ -11,27 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//  
+// 
+
 using System;
 using System.Threading;
 
 namespace SlimThreading {
 
 	public static class Platform {
-		private const int REFRESH_INTERVAL_MS = 30000;
-		private static DateTime nextRefreshTime = DateTime.MinValue;
-		private static int processorCount = 1;
 
 		//
-		// Yield processor.
+		// Yields the processor.
 		//
 
 		public static void YieldProcessor() {
-            NativeMethods.SwitchToThread();
+            Thread.Yield();
 		}
 
 		//
-		// Return true when the current process runs on a single processor machine.
+		// Returns true when the current process runs on a single processor machine.
 		//
 
 		internal static bool IsSingleProcessor {
@@ -39,7 +37,7 @@ namespace SlimThreading {
 		}
 
 		//
-		// Return true when the current process runs on a multiprocessor machine.
+		// Returns true when the current process runs on a multiprocessor machine.
 		//
 
 		internal static bool IsMultiProcessor {
@@ -47,42 +45,7 @@ namespace SlimThreading {
 		}
 
 		internal static int ProcessorCount {
-			get {
-				if (DateTime.UtcNow.CompareTo(nextRefreshTime) >= 0) {
-					UIntPtr processAffinityMask;
-					UIntPtr systemAffinityMask;
-
-					//
-					// Get the process and system affinity mask.
-					//
-
-					NativeMethods.GetProcessAffinityMask(NativeMethods.GetCurrentProcess(),
-														 out processAffinityMask,
-														 out systemAffinityMask);
-					//
-					// Get the number of processors in the system.
-					//
-
-					NativeMethods.SYSTEM_INFO sysInfo = new NativeMethods.SYSTEM_INFO();
-					NativeMethods.GetSystemInfo(ref sysInfo);
-
-					//
-					// Compute the number of processors used by the
-					// current process.
-					//
-
-					ulong processMask = (~0UL >> (64 - sysInfo.numberOfProcessors)) &
-										 processAffinityMask.ToUInt64();
-					int count = 0;
-					while (processMask > 0) {
-						count++;
-						processMask &= processMask - 1;
-					}
-					processorCount = count;
-					nextRefreshTime = DateTime.UtcNow.AddMilliseconds(REFRESH_INTERVAL_MS);
-				}
-				return processorCount;
-			}
+            get { return Environment.ProcessorCount; }
 		}
 
         //

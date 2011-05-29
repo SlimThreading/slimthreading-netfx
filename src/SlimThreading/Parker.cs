@@ -14,7 +14,6 @@
 //
 
 using System;
-using System.Diagnostics;
 using System.Threading;
 
 #pragma warning disable 0420
@@ -341,7 +340,7 @@ namespace SlimThreading {
 
         internal bool CasNext(StParker n, StParker nn) {
             return (pnext == n &&
-                    Interlocked.CompareExchange<StParker>(ref pnext, nn, n) == n);
+                    Interlocked.CompareExchange(ref pnext, nn, n) == n);
         }
     }
 
