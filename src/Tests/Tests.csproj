@@ -34,19 +34,16 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="nunit.framework">
-      <HintPath>..\..\bin\NUnit\nunit.framework.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assert.cs" />
     <Compile Include="ExchangerAsyncTest.cs" />
     <Compile Include="ExchangerTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Test.cs" />
     <Compile Include="TestBarrier.cs" />
     <Compile Include="TestBlockingQueue.cs" />
-    <Compile Include="TestExchanger.cs" />
     <Compile Include="TestFairLock.cs" />
     <Compile Include="TestInitOnceLock.cs" />
     <Compile Include="TestLock.cs" />

@@ -16,12 +16,9 @@
 using System;
 using System.Linq;
 using System.Threading;
-using NUnit.Framework;
 using SlimThreading;
 
 namespace Tests {
-
-    [TestFixture]
     public class ExchangerTest {
         
         private const int DURATION = 10000;
@@ -52,7 +49,6 @@ namespace Tests {
             done.Signal();
         }
 
-        [Test]
 		public static void Run() {
 			for (int i = 0; i < EXCHANGERS; i++) {
 			    int id = i;

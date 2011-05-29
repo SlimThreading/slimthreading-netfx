@@ -14,15 +14,11 @@
 //  
 
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-using NUnit.Framework;
 using SlimThreading;
 
 namespace Tests {
-
-    [TestFixture]
     public class ExchangerAsyncTest {
         private const int DURATION = 10000;
 
@@ -65,7 +61,6 @@ namespace Tests {
             xchg.RegisterExchange(id, callback, state, 1);
         }
 
-        [Test]
         public static void Run() {
             for (int i = 0; i < EXCHANGERS; ++i) {
                 Exchange(i);
