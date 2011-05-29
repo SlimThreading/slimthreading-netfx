@@ -251,15 +251,9 @@ namespace SlimThreading {
                 // account the elapsed time.
 		        //
 
-		        if (cargs.Timeout != Timeout.Infinite) {
-			        int now = Environment.TickCount;
-			        int e = (now == lastTime) ? 1 : (now - lastTime);
-			        if (cargs.Timeout <= e) {
-				        return false;
-			        }
-			        cargs.Timeout -= e;
-			        lastTime = now;
-		        }
+                if (!cargs.AdjustTimeout(ref lastTime)) {
+                    return false;
+                }
             } while (true);
         }
 	

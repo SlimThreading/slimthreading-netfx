@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -587,15 +588,10 @@ namespace SlimThreading {
 		        // that will be used on the next wait.
 		        //
 
-		        if (cargs.Timeout != Timeout.Infinite) {
-			        int now = Environment.TickCount;
-			        int e = (now == lastTime) ? 1 : (now - lastTime);
-			        if (cargs.Timeout <= e) {
-				        return false;
-			        }
-			        cargs.Timeout -= e;
-			        lastTime = now;
-		        }
+                if (!cargs.AdjustTimeout(ref lastTime)) {
+                    return false;
+                }
+
 		        waitHint = 0;
             } while (true);
         }
@@ -617,7 +613,7 @@ namespace SlimThreading {
         public static bool SignalAndWait(StWaitable tos, StWaitable tow, StCancelArgs cargs) {
 	
             //
-	        // Create a parker execute the WaitAny prologue on the
+	        // Create a parker to execute the WaitAny prologue on the
             // *tow* waitable.
 	        //
 
@@ -633,9 +629,9 @@ namespace SlimThreading {
             if (!tos._Release()) {
 
                 //
-		        // The signal operation failed. So, try to cancel to cancel the
-                // parker and, if succeed, cancel the acquire attempt; otherwise,
-                // wait until the thread is unparked and, then, undo the acquire.
+		        // The signal operation failed. So, try to cancel the parker and,
+                // if successful, cancel the acquire attempt; otherwise, wait until 
+                // the thread is unparked and, then, undo the acquire.
 		        //
 
                 if (pk.TryCancel()) {

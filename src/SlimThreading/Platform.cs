@@ -86,23 +86,6 @@ namespace SlimThreading {
 		}
 
         //
-        // Adjusts the timeout value based on lastTime.
-        //
-
-        public static int AdjustTimeout(ref int lastTime, ref int timeout) {
-            if (timeout == Timeout.Infinite) {
-                return Timeout.Infinite;
-            }
-            int now = Environment.TickCount;
-            int e = (now == lastTime) ? 1 : now - lastTime;
-            if (timeout <= e) {
-                return (timeout = 0);
-            }
-            lastTime = now;
-            return (timeout -= e);
-        }
-
-        //
         // ...
         //
 

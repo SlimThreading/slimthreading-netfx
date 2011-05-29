@@ -13,7 +13,6 @@
 // limitations under the License.
 //  
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using SlimThreading;
@@ -46,7 +45,7 @@ namespace TestShared {
 						permits -= id;
 						return true;
 					}
-                    if (Platform.AdjustTimeout(ref lastTime, ref cargs.Timeout) == 0) {
+                    if (!cargs.AdjustTimeout(ref lastTime)) {
                         return false;
                     }
 				}
@@ -106,7 +105,7 @@ namespace TestShared {
 						cv.PulseAll();
 						return true;
 					}
-                    if (Platform.AdjustTimeout(ref lastTime, ref cargs.Timeout) == 0) {
+                    if (!cargs.AdjustTimeout(ref lastTime)) {
                         return false;
                     }
 				}
@@ -135,7 +134,7 @@ namespace TestShared {
 						cv.PulseAll();
 						return true;
 					}
-                    if (Platform.AdjustTimeout(ref lastTime, ref cargs.Timeout) == 0) {
+                    if (!cargs.AdjustTimeout(ref lastTime)) {
                         di = default(T);
                         return false;
                     }
@@ -188,7 +187,7 @@ namespace TestShared {
 						nonEmpty.Pulse();
 						return true;
 					}
-                    if (Platform.AdjustTimeout(ref lastTime, ref cargs.Timeout) == 0) {
+                    if (!cargs.AdjustTimeout(ref lastTime)) {
                         return false;
                     }
 				}
@@ -217,7 +216,7 @@ namespace TestShared {
 						nonFull.Pulse();
 						return true;
 					}
-                    if (Platform.AdjustTimeout(ref lastTime, ref cargs.Timeout) == 0) {
+                    if (!cargs.AdjustTimeout(ref lastTime)) {
                         di = default(T);
                         return false;
                     }

@@ -25,22 +25,22 @@ namespace SlimThreading {
     public struct StCancelArgs {
 
         //
-        // The specified timeout; -1 means timeout disable.
+        // The specified timeout, disable if set to -1.
         //
 
-        public int Timeout;
+        public int Timeout { get; private set; }
 
         //
-        // The alerter, null means no alerter.
+        // The alerter. Can be null.
         //
 
-        public StAlerter Alerter;
+        public StAlerter Alerter { get; private set; }
 
         //
         // Indicates if the wait can be cancelled by thread interruption.
         //
 
-        public bool Interruptible;
+        public bool Interruptible { get; private set; }
 
         //
         // CancelArgs used to specify no canceller.
@@ -56,44 +56,57 @@ namespace SlimThreading {
             if (timeout < -1) {
                 throw new ArgumentOutOfRangeException("timeout", timeout, "Wrong timeout value");
             }
+
+            this = new StCancelArgs();
             Timeout = timeout;
             Alerter = alerter;
             Interruptible = interruptible;
         }
 
-        public StCancelArgs(int timeout) 
-            : this(timeout, null, false) { }
+        public StCancelArgs(int timeout) : this(timeout, null, false) { }
 
-        public StCancelArgs(TimeSpan timeout)
-            : this(timeout.Milliseconds, null, false) { }
+        public StCancelArgs(TimeSpan timeout) : this(timeout.Milliseconds, null, false) { }
 
-        public StCancelArgs(StAlerter alerter) 
-            : this(-1, alerter, false) { }
+        public StCancelArgs(StAlerter alerter) : this(-1, alerter, false) { }
 
-        public StCancelArgs(bool interruptible) 
-            : this(-1, null, interruptible) { }
+        public StCancelArgs(bool interruptible) : this(-1, null, interruptible) { }
         
-        public StCancelArgs(int timeout, bool interruptible)
-            : this(timeout, null, interruptible) { }
+        public StCancelArgs(int timeout, bool interruptible) : this(timeout, null, interruptible) { }
 
-        public StCancelArgs(TimeSpan timeout, bool interruptible)
-            : this(timeout.Milliseconds, null, interruptible) { }
+        public StCancelArgs(TimeSpan timeout, bool interruptible) : this(timeout.Milliseconds, null, interruptible) { }
  
-        public StCancelArgs(int timeout, StAlerter alerter) 
-            : this(timeout, alerter, false) { }
+        public StCancelArgs(int timeout, StAlerter alerter) : this(timeout, alerter, false) { }
 
-        public StCancelArgs(TimeSpan timeout, StAlerter alerter) 
-            : this(timeout.Milliseconds, alerter, false) { }
+        public StCancelArgs(TimeSpan timeout, StAlerter alerter) : this(timeout.Milliseconds, alerter, false) { }
 
-        public StCancelArgs(StAlerter alerter, bool interruptible)
-            : this(-1, alerter, interruptible) { }
+        public StCancelArgs(StAlerter alerter, bool interruptible) : this(-1, alerter, interruptible) { }
+
+        //
+        // Adjusts the timeout value, returning false if the timeout 
+        // has expired.
+        //
+
+        public bool AdjustTimeout(ref int lastTime) {
+            if (Timeout == System.Threading.Timeout.Infinite) {
+                return true;
+            }
+            
+            int now = Environment.TickCount;
+            int e = (now == lastTime) ? 1 : (now - lastTime);
+            if (Timeout <= e) {
+                return false;
+            }
+            Timeout -= e;
+            lastTime = now;
+            return true;
+        }
 
         //
         // Thows the cancellation exception, if appropriate;
         // otherwise, does noting.
         //
 
-        internal static void ThrowIfException(int ws) {
+        public static void ThrowIfException(int ws) {
             switch (ws) {
                 case StParkStatus.Alerted: throw new StThreadAlertedException();
                 case StParkStatus.Interrupted: throw new ThreadInterruptedException();
