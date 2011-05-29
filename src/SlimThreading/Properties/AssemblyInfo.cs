@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-[assembly: CLSCompliant(true )]
+[assembly: InternalsVisibleTo("Tests")]
+
+[assembly: CLSCompliant(true)]
 [assembly: ComVisible(false)]
 [assembly: AssemblyTitle("SlimThreading")]
 [assembly: AssemblyDescription("A library for slim threading on .NET")]
