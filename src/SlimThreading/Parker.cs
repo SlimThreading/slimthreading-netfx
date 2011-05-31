@@ -252,7 +252,7 @@ namespace SlimThreading {
             // Allocate a park spot to block the current thread.
             //
 
-            parkSpot = ParkSpot.Alloc();
+            parkSpot = ParkSpot.Factory.Alloc();
 
             //
             // Try to clear the wait-in-progress bit. If the bit was already
