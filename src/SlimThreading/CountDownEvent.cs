@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -25,15 +26,7 @@ namespace SlimThreading {
 
     public sealed class StCountDownEvent : StNotificationEventBase {
 
-        //
-        // The count down event state.
-        //
-
         private volatile int count;
-
-        //
-        // Constructors.
-        //
 
         public StCountDownEvent(int count, int spinCount) : base(count == 0, spinCount) {
             this.count = count;
@@ -59,7 +52,7 @@ namespace SlimThreading {
                     //
 
 			        if (c == n) {
-				        InternalSet();
+                        waitEvent.Set();
                         return true;
 			        }
 			        return false;
@@ -121,20 +114,10 @@ namespace SlimThreading {
 		//
 
         public bool Wait(StCancelArgs cargs) {
-            if (count == 0) {
-                return true;
-            }
-            if (cargs.Timeout == 0) {
-                return false;
-            }
-            int ws = SlowWait(cargs);
+            int ws = waitEvent.Wait(cargs);
             if (ws == StParkStatus.Success) {
                 return true;
             }
-
-            //
-            // The wait was cancelled; so, report the failure appropriately.
-            //
 
             StCancelArgs.ThrowIfException(ws);
             return false;

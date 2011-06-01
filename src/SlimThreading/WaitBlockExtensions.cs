@@ -41,7 +41,7 @@ namespace SlimThreading {
 
         //
         // Tries to lock the parker object associated with the specified
-        // wait block, unparking the thread if successful.
+        // wait block, unparking the thread on success.
         //
 
         internal static bool TryLockAndUnpark(this WaitBlock wb)

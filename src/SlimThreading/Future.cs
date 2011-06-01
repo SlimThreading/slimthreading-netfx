@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -19,9 +20,9 @@ using System.Threading;
 
 namespace SlimThreading {
 
-	//
-	// This class implements a future for the type T.
-	//
+    //
+    // This class implements a future for the type T.
+    //
 
     public sealed class StFuture<T> : StNotificationEventBase {
         
@@ -31,10 +32,6 @@ namespace SlimThreading {
 
         private volatile int wasSet;
         private T _value;
-
-        //
-        // Constructors.
-        //
 
         public StFuture(int spinCount) : base(false, spinCount) { }
 
@@ -46,45 +43,32 @@ namespace SlimThreading {
         //
 
         public bool Wait(out T result, StCancelArgs cargs) {
-            
-            //
-            // If the event is signalled, the value is already available.
-            //
-
-            if (InternalIsSet) {
+            if (waitEvent.IsSet) {
                 result = _value;
                 return true;
             }
 
-            //
-            // Waits on the event, activating the specified cancellers.
-            //
-
-            int ws = InternalWait(cargs);
+            int ws = waitEvent.Wait(cargs);
             if (ws == StParkStatus.Success) {
                 result = _value;
                 return true;
             }
-
-            //
-            // The wait was cancelled; so report the failure appropriately.
-            //
-
+            
             result = default(T);
             StCancelArgs.ThrowIfException(ws);
             return false;
         }
 
-	    //
-	    // Get and set the future value.
-	    //
+        //
+        // Get and set the future value.
+        //
 
         public T Value {
             get {
-                if (InternalIsSet) {
+                if (waitEvent.IsSet) {
                     return _value;
                 }
-                InternalWait(StCancelArgs.None);
+                waitEvent.Wait(StCancelArgs.None);
                 return _value;
             }
 
@@ -101,14 +85,10 @@ namespace SlimThreading {
                     //
 
                     _value = value;
-                    InternalSet();
+                    waitEvent.Set();
                     return;
                 }
 
-                //
-                // The future value was already set, so throw the appropriate exception.
-                //
-                
                 throw new InvalidOperationException("The future value is alredy set");
             }
         }
