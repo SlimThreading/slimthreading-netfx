@@ -20,15 +20,7 @@ using System.Threading;
 
 namespace SlimThreading {
 
-    //
-    // This class implements the parker.
-    //
-
     public class StParker {
-
-        //
-        // Constants.
-        //
 
         private const int WAIT_IN_PROGRESS_BIT = 31;
         private const int WAIT_IN_PROGRESS = (1 << WAIT_IN_PROGRESS_BIT);
@@ -41,27 +33,15 @@ namespace SlimThreading {
 
         internal volatile StParker pnext;
 
-        //
-        // The parker state.
-        //
-
         internal volatile int state;
-
-        //
-        // The park spot used to block the parker's owner thread.
-        //
-
-        internal ParkSpot parkSpot;
-
-        //
-        // The park wait status.
-        //
-
+        internal IParkSpot parkSpot;
         internal int waitStatus;
 
-        //
-        // Constructors.
-        //
+        public StParker(int releasers, IParkSpot parkSpot) : this(releasers) {
+            this.parkSpot = parkSpot;   
+        }
+
+        public StParker(IParkSpot parkSpot) : this(1, parkSpot) { }
 
         public StParker(int releasers) {
             state = releasers | WAIT_IN_PROGRESS;
@@ -69,9 +49,15 @@ namespace SlimThreading {
 
         public StParker() : this(1) { }
 
-        //
-        // Resets the parker.
-        //
+        public static int Sleep(StCancelArgs cargs) {
+            int ws = new StParker().Park(0, cargs);
+            StCancelArgs.ThrowIfException(ws);
+            return ws;
+        }
+
+        public bool IsLocked {
+            get { return (state & LOCK_COUNT_MASK) == 0; }
+        }
 
         public void Reset(int releasers) {
             pnext = null;
@@ -81,34 +67,6 @@ namespace SlimThreading {
         public void Reset() {
             Reset(1);
         }
-
-        //
-        // Tests and clears the wait-in-progress bit.
-        //
-
-        internal bool TestAndClearInProgress() {
-            do {
-                int s;
-                if ((s = state) >= 0) {
-                    return false;
-                }
-                if (Interlocked.CompareExchange(ref state, (s & ~WAIT_IN_PROGRESS), s) == s) {
-                    return true;
-                }
-            } while (true);
-        }
-
-        //
-        // Returns true if the parker is locked.
-        //
-
-        public bool IsLocked {
-            get { return (state & LOCK_COUNT_MASK) == 0; }
-        }
-
-        //
-        // Tries to lock the parker.
-        //
 
         public bool TryLock() {
             do {
@@ -137,15 +95,11 @@ namespace SlimThreading {
             } while (true);
         }
 
-        //
-        // Tries to cancel the parker.
-        //
-
         public bool TryCancel() {
             do {
 
                 //
-                // If the parker is already locked, return false.
+                // Fail if the parker is already locked.
                 //
 
                 int s;
@@ -154,8 +108,8 @@ namespace SlimThreading {
                 }
 
                 //
-                // Try to set the park's count down lock to zero, preserving 
-                // the wait-in-progress bit. Return true on success. 
+                // Try to set the parker's count down lock to zero, preserving 
+                // the wait-in-progress bit.
                 //
 
                 if (Interlocked.CompareExchange(ref state, (s & WAIT_IN_PROGRESS), s) == s) {
@@ -165,10 +119,7 @@ namespace SlimThreading {
         }
 
         //
-        // Cancels the parker.
-        //
-        // NOTE: This method should be called only by the parker's
-        //       owner thread.
+        // This method should be called only by the owner thread.
         //
 
         public void SelfCancel() {
@@ -184,10 +135,6 @@ namespace SlimThreading {
             return (state & WAIT_IN_PROGRESS) != 0 &&
                    (Interlocked.Exchange(ref state, 0) & WAIT_IN_PROGRESS) != 0;
         }
-
-        //
-        // Unparks the parker owner thread.
-        //
 
         public void Unpark(int status) {
             if (UnparkInProgress(status)) {
@@ -205,7 +152,7 @@ namespace SlimThreading {
                 // Finally, execute the associated callback.
                 //
 
-                CbParker cbpk = (CbParker)this;
+                var cbpk = (CbParker)this;
                 if (cbpk.toTimer != null && status != StParkStatus.Timeout) {
                     TimerList.UnlinkRawTimer(cbpk.toTimer);
                     cbpk.toTimer = null;
@@ -215,7 +162,7 @@ namespace SlimThreading {
         }
 
         //
-        // Unparks the parker's owner thread.
+        // This method should be called only by the owner thread.
         //
 
         public void UnparkSelf(int status) {
@@ -223,18 +170,7 @@ namespace SlimThreading {
             state = 0;
         }
 
-        //
-        // Parks the current thread until it is unparked, activating the
-        // specified cancellers and spinning if specified.
-        //
-
         public int Park(int spinCount, StCancelArgs cargs) {
-
-            //
-            // Spin the specified number of cycles before blocking
-            // the current thread.
-            //
-
             do {
                 if (state == 0) {
                     return waitStatus;
@@ -248,20 +184,16 @@ namespace SlimThreading {
                 Platform.SpinWait(1);
             } while (true);
 
-            //
-            // Allocate a park spot to block the current thread.
-            //
-
-            parkSpot = ParkSpot.Factory.Alloc();
+            if (parkSpot == null) {
+                parkSpot = ThreadExtensions.ParkSpotFactory.Create();
+            }
 
             //
             // Try to clear the wait-in-progress bit. If the bit was already
-            // cleared, the thread was unparked. So, free the park spot and
-            // return the wait status.
+            // cleared, the thread is unparked. 
             //
 
             if (!TestAndClearInProgress()) {
-                parkSpot.Free();
                 return waitStatus;
             }
 
@@ -275,38 +207,25 @@ namespace SlimThreading {
                 if (!(unregister = cargs.Alerter.RegisterParker(this))) {
 
                     //
-                    // The alerter is already set. So, we try to cancel the
-                    // parker and, if successful, we free the park spot and 
-                    // return an alerted wait status.
+                    // The alerter is already set. So, we try to cancel the parker.
                     //
 
                     if (TryCancel()) {
-                        parkSpot.Free();
                         return StParkStatus.Alerted;
                     }
 
                     //
                     // We can't cancel the parker because someone else acquired 
-                    // the count down lock. So, we must wait unconditionally on 
-                    // the park spot until it is set.
+                    // the count down lock. We must wait unconditionally until
+                    // the park spot is set.
                     //
 
-                    cargs.ResetImplicitCancellers();
+                    cargs = StCancelArgs.None;
                 }
             }
 
-            //
-            // Wait on the park spot.
-            //
-
             parkSpot.Wait(this, cargs);
 
-            //
-            // Free the park spot and deregister the parker from the
-            // alerter, if it was registered.
-            //
-
-            parkSpot.Free();
             if (unregister) {
                 cargs.Alerter.DeregisterParker(this);
             }
@@ -317,21 +236,20 @@ namespace SlimThreading {
             return Park(0, cargs);
         }
 
-
         public int Park() {
             return Park(0, StCancelArgs.None);
         }
 
-        //
-        // Delays execution of the current thread, sensing
-        // the specified cancellers.
-        //
-
-        public static int Sleep(StCancelArgs cargs) {
-            StParker pk = new StParker();
-            int ws = pk.Park(0, cargs);
-            StCancelArgs.ThrowIfException(ws);
-            return ws;
+        internal bool TestAndClearInProgress() {
+            do {
+                int s;
+                if ((s = state) >= 0) {
+                    return false;
+                }
+                if (Interlocked.CompareExchange(ref state, (s & ~WAIT_IN_PROGRESS), s) == s) {
+                    return true;
+                }
+            } while (true);
         }
 
         //
@@ -357,10 +275,6 @@ namespace SlimThreading {
     internal class CbParker : StParker {
         internal readonly ParkerCallback callback;
         internal RawTimer toTimer;
-
-        //
-        // Constructor.
-        //
 
         internal CbParker(ParkerCallback pkcb) : base(1) {
             callback = pkcb;

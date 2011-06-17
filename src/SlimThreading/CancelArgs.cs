@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -25,7 +26,7 @@ namespace SlimThreading {
     public struct StCancelArgs {
 
         //
-        // The specified timeout, disable if set to -1.
+        // The specified timeout, disabled if set to -1.
         //
 
         public int Timeout { get; private set; }
@@ -43,14 +44,10 @@ namespace SlimThreading {
         public bool Interruptible { get; private set; }
 
         //
-        // CancelArgs used to specify no canceller.
+        // CancelArgs used to specify no cancellers.
         //
 
         public static readonly StCancelArgs None = new StCancelArgs(-1, null, false);
-
-        //
-        // Constructors.
-        //
 
         public StCancelArgs(int timeout, StAlerter alerter, bool interruptible) {
             if (timeout < -1) {
@@ -96,6 +93,7 @@ namespace SlimThreading {
             if (Timeout <= e) {
                 return false;
             }
+
             Timeout -= e;
             lastTime = now;
             return true;
@@ -122,15 +120,6 @@ namespace SlimThreading {
             if (ws == StParkStatus.Interrupted) {
                 Thread.CurrentThread.Interrupt();
             }
-        }
-
-        //
-        // Resets the implicit cancellers.
-        //
-
-        internal void ResetImplicitCancellers() {
-            Timeout = -1;
-            Interruptible = false;
         }
     }
 }

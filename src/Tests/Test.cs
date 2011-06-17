@@ -47,15 +47,17 @@ namespace Tests {
             //stop = TestShared.TestStreamBlockingQueue.Run();
             //stop = TestShared.TestSynchronizationEvent.Run();
             //stop = TestShared.TestTimer.Run();
+            //stop = WaitAnyTest.Run();
+            stop = WaitAllTest.Run();
 
-            //VConsole.WriteLine("+++ hit <enter> to terminate...");
-            //Console.ReadLine();
-            //stop();
-            //VConsole.Write("+++hit <enter> to exit...");
-            //Console.ReadLine();
+            VConsole.WriteLine("+++ hit <enter> to terminate...");
+            Console.ReadLine();
+            stop();
+            VConsole.Write("+++hit <enter> to exit...");
+            Console.ReadLine();
 
             //ExchangerTest.Run();
-            ExchangerAsyncTest.Run();
+            //ExchangerAsyncTest.Run();
         }
     }
 }
