@@ -14,86 +14,130 @@
 //  
 
 using System;
-using System.Threading;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace SlimThreading {
+    
+    public interface IParkSpot {
+        void Set();
+        void Wait(StParker pk, StCancelArgs cargs);
+    }
 
-    internal abstract class ParkSpot {
+    public interface IParkSpotFactory {
+        IParkSpot Create();
+    }
 
-        //
-        // Each thread has its own park spot factory.
-        //
+    public interface IWaitBehavior {
+        int Park(AutoResetEvent psevent, int timeout);
+        int ParkerCancelled(int previousParkStatus);
+        void ParkerNotCancelled(int previousParkStatus);
+    }
 
+    public class WaitOneBehavior : IWaitBehavior {
+        public int Park(AutoResetEvent psevent, int timeout) {
+            return psevent.WaitOne(timeout) ? StParkStatus.Success : StParkStatus.Timeout;
+        }
+
+        public int ParkerCancelled(int previousParkStatus) {
+            return previousParkStatus;
+        }
+
+        public void ParkerNotCancelled (int previousParkStatus) { }
+    }
+
+    public class WaitAnyBehavior : IWaitBehavior {
+        private readonly WaitHandle[] handles;
+        private readonly int offset;
+
+        public WaitAnyBehavior(WaitHandle[] handles, int offset) {
+            Array.Copy(handles, 0, (this.handles = new WaitHandle[handles.Length + 1]), 1, handles.Length);
+            this.offset = offset;
+        }
+
+        public int Park(AutoResetEvent psevent, int timeout) {
+            handles[0] = psevent;
+            int result = WaitHandle.WaitAny(handles, timeout);
+            return result == WaitHandle.WaitTimeout ? StParkStatus.Timeout : result;
+        }
+
+        public int ParkerCancelled(int previousParkStatus) {
+            if (previousParkStatus != StParkStatus.Timeout && previousParkStatus != StParkStatus.Interrupted) {
+                previousParkStatus += offset - 1;
+            }
+            return previousParkStatus;
+        }
+
+        public void ParkerNotCancelled (int previousParkStatus) {
+            if (previousParkStatus != StParkStatus.Timeout) {
+                handles[previousParkStatus].UndoAcquire();  
+            }
+        }
+    }
+
+    public class WaitAllBehavior : WaitOneBehavior, IWaitBehavior {
+        private readonly WaitHandle[] handles;
+
+        public WaitAllBehavior(WaitHandle[] handles) {
+            Array.Copy(handles, 0, (this.handles = new WaitHandle[handles.Length + 1]), 1, handles.Length);
+        }
+
+        public new int Park(AutoResetEvent psevent, int timeout) {
+            handles[0] = psevent;
+            return WaitHandle.WaitAll(handles, timeout) ? StParkStatus.Success : StParkStatus.Timeout;
+        }
+    }
+
+    public class EventBasedParkSpotFactory : IParkSpotFactory {
         [ThreadStatic]
-        private static ParkSpotFactory factory;
+        private static EventBasedParkSpotFactory current;
+        private static readonly IWaitBehavior DefaultWaitBehavior = new WaitOneBehavior();
+        private readonly Stack<EventBasedParkSpot> parkSpots = new Stack<EventBasedParkSpot>();
 
-        //
-        // Returns the current thread's ParkSpot factory, ensuring appropriate
-        // initialization.
-        //
-
-        internal static ParkSpotFactory Factory {
-            get { return factory ?? (factory = new ParkSpotFactory()); }
+        public static EventBasedParkSpotFactory Current {
+            get { return  current ?? (current = new EventBasedParkSpotFactory()); }
         }
 
-        //
-        // As the access to a thread local field is expensive, we cache a
-        // reference to the factory in the park spot instance in order to 
-        // save the access when the park spot is freed.
-        //
-
-        protected readonly ParkSpotFactory _factory;
-
-        protected ParkSpot(ParkSpotFactory psf) {
-            _factory = psf;
+        public IParkSpot Create() {
+            return Create(DefaultWaitBehavior);
         }
 
-        //
-        // Frees the park spot.
-        //
-
-        internal void Free() {
-            _factory.Free(this);
+        public EventBasedParkSpot Create(IWaitBehavior waitBehavior) {
+            return parkSpots.Count > 0 ? parkSpots.Pop() : new EventBasedParkSpot(this, waitBehavior);
         }
 
-        //
-        // Sets the park spot.
-        //
-
-        internal abstract void Set();
-
-        //
-        // Waits on the park spot, activating the specified cancellers.
-        //
-
-        internal abstract void Wait(StParker pk, StCancelArgs cargs);
+        public void Free(EventBasedParkSpot ps) {
+            parkSpots.Push(ps);
+        }
     }
 
     //
     // This class represents a park spot based on an auto-reset 
-    // event that will be used by normal threads (STA and MTA).
+    // event that will be used by normal threads.
     //
 
-    internal class EventBasedParkSpot : ParkSpot {
-
+    public class EventBasedParkSpot : IParkSpot {
+        private readonly EventBasedParkSpotFactory factory;
+        private readonly IWaitBehavior waitBehavior;
         private readonly AutoResetEvent psevent;
 
-        internal EventBasedParkSpot(ParkSpotFactory psf) : base(psf) {
+        internal EventBasedParkSpot(EventBasedParkSpotFactory factory, IWaitBehavior waitBehavior) {
+            this.factory = factory;
+            this.waitBehavior = waitBehavior;
             psevent = new AutoResetEvent(false);
         }
 
-        //
-        // Waits on the park spot, activating the specified cancellers.
-        //
+        public void Set() {
+            psevent.Set();
+        }
 
-        internal override void Wait(StParker pk, StCancelArgs cargs) {
-            int ws;
+        public void Wait(StParker pk, StCancelArgs cargs) {
             bool interrupted = false;
+            int lastTime = (cargs.Timeout != Timeout.Infinite) ? Environment.TickCount : 0;
+            int ws;
             do {
                 try {
-                    ws = psevent.WaitOne(cargs.Timeout, false) ? StParkStatus.Success
-                                                               : StParkStatus.Timeout;
+                    ws = waitBehavior.Park(psevent, cargs.Timeout);
                     break;
                 } catch (ThreadInterruptedException) {
                     if (cargs.Interruptible) {
@@ -101,6 +145,7 @@ namespace SlimThreading {
                         break;
                     }
                     interrupted = true;
+                    cargs.AdjustTimeout(ref lastTime);
                 }
             } while (true);
 
@@ -112,11 +157,13 @@ namespace SlimThreading {
 
             if (ws != StParkStatus.Success) {
                 if (pk.TryCancel()) {
-                    pk.UnparkSelf(ws);
+                    pk.UnparkSelf(waitBehavior.ParkerCancelled(ws));
                 } else {
                     if (ws == StParkStatus.Interrupted) {
                         interrupted = true;
                     }
+
+                    waitBehavior.ParkerNotCancelled(ws);
 
                     do {
                         try {
@@ -137,40 +184,8 @@ namespace SlimThreading {
             if (interrupted) {
                 Thread.CurrentThread.Interrupt();
             }
-        }
 
-        //
-        // Sets the park spot.
-        //
-
-        internal override void Set() {
-            psevent.Set();
-        }
-    }
-
-    internal class ParkSpotFactory {
-
-        private readonly Stack<ParkSpot> parkSpots;
-
-        public ParkSpotFactory() {
-            parkSpots = new Stack<ParkSpot>();
-            parkSpots.Push(new EventBasedParkSpot(this));
-        }
-
-        //
-        // Allocates a park spot to block the factory's owner thread.
-        //
-
-        internal ParkSpot Alloc() {
-            return parkSpots.Count > 0 ? parkSpots.Pop() : new EventBasedParkSpot(this);
-        }
-
-        //
-        // Frees the specified park spot.
-        //
-
-        internal void Free(ParkSpot ps) {
-            parkSpots.Push(ps);
+            factory.Free(this);
         }
     }
 }

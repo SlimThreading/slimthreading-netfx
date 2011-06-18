@@ -70,12 +70,14 @@
     <Compile Include="SpinWait.cs" />
     <Compile Include="StreamBlockingQueue.cs" />
     <Compile Include="SynchronizationEvent.cs" />
+    <Compile Include="ThreadExtensions.cs" />
     <Compile Include="Timer.cs" />
     <Compile Include="TimerList.cs" />
     <Compile Include="UnboundedBlockingQueue.cs" />
     <Compile Include="Waitable.cs" />
     <Compile Include="WaitBlock.cs" />
     <Compile Include="WaitBlockExtensions.cs" />
+    <Compile Include="WaitHandleExtensions.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

@@ -64,6 +64,8 @@
     <Compile Include="TestSynchronizationEvent.cs" />
     <Compile Include="TestTimer.cs" />
     <Compile Include="VConsole.cs" />
+    <Compile Include="WaitAllTest.cs" />
+    <Compile Include="WaitAnyTest.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SlimThreading\SlimThreading.csproj">
