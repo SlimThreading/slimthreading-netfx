@@ -49,8 +49,7 @@
     <Compile Include="TestLock.cs" />
     <Compile Include="TestMonitor.cs" />
     <Compile Include="TestMultipleQueues.cs" />
-    <Compile Include="TestNotificationEvent.cs" />
-    <Compile Include="TestNotificationEventBase.cs" />
+    <Compile Include="NotificationEventTest.cs" />
     <Compile Include="TestReadUpgradeWriteLock.cs" />
     <Compile Include="TestReadWriteLock.cs" />
     <Compile Include="TestReentrantFairLock.cs" />

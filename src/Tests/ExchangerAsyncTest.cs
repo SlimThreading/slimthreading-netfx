@@ -15,12 +15,10 @@
 
 using System;
 using System.Linq;
-using System.Threading;
 using SlimThreading;
 
 namespace Tests {
     public class ExchangerAsyncTest {
-        private const int DURATION = 10000;
 
         private const int EXCHANGERS = 19;
 
@@ -61,28 +59,28 @@ namespace Tests {
             xchg.RegisterExchange(id, callback, state, 1);
         }
 
-        public static void Run() {
+        public static Action Run() {
             for (int i = 0; i < EXCHANGERS; ++i) {
                 Exchange(i);
             }
 
-            Thread.Sleep(DURATION);
+            return () => {
+                stop = 1;
+                done.Wait();
+                long xs = 0;
 
-            stop = 1;
-            done.Wait();
-            long xs = 0;
-
-            for (int i = 0; i < EXCHANGERS; ++i) {
-                Assert.AreEqual(0, counters[i][i]);
-                for (int j = i + 1; j < EXCHANGERS; ++j) {
-                    Assert.AreEqual(counters[i][j], counters[j][i]);
-                    xs += counters[i][j];
+                for (int i = 0; i < EXCHANGERS; ++i) {
+                    Assert.AreEqual(0, counters[i][i]);
+                    for (int j = i + 1; j < EXCHANGERS; ++j) {
+                        Assert.AreEqual(counters[i][j], counters[j][i]);
+                        xs += counters[i][j];
+                    }
                 }
-            }
 
-            Assert.IsNull(xchg.xchgPoint);
+                Assert.IsNull(xchg.xchgPoint);
 
-            VConsole.WriteLine("---Total unique exchanges: {0}", xs);
+                VConsole.WriteLine("---Total unique exchanges: {0}", xs);
+            };
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,48 +14,35 @@
 //  
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
+using SlimThreading;
 
 namespace Tests {
-    class Test {
-        static void Main() {
+    static class Test {
+        private static readonly Dictionary<Type, Func<Action>> tests = new Dictionary<Type, Func<Action>> {
+            { typeof(StNotificationEvent), NotificationEventTest.Run }    
+        };
+
+        public static void RunTestFor<T>(int timeout) {
             Thread.CurrentThread.Priority = ThreadPriority.Highest;
-            Action stop;
+            Action stop = tests[typeof(T)]();
+            if (timeout == Timeout.Infinite) {
+                VConsole.WriteLine("+++ press any key to terminate...");
+                Console.ReadLine();
+            } else {
+                Thread.Sleep(timeout);
+            }
 
-            //stop = TestShared.TestBarrier.Run();
-            //stop = TestShared.TestBlockingQueue.Run();
-            //stop = TestShared.TestCancellationToken.Run();
-            //stop = TestShared.TestExchanger.Run();
-            //stop = TestShared.TestFairLock.Run();
-            //stop = TestShared.TestInitOnceLock.Run();
-            //stop = TestShared.TestLock.Run();
-            //stop = TestShared.TestMonitorBasedSemaphore.Run();
-            //stop = TestShared.TestMonitorBasedLinkedBlockingQueue.Run();
-            //stop = TestShared.TestMultipleQueue.Run();
-            //stop = TestShared.TestNotificationEvent.Run();
-            //stop = TestShared.TestNotificationEventBase.Run();
-            //stop = TestShared.TestReadUpgradeWriteLock.Run();
-            //stop = TestShared.TestReadWriteLock.Run();
-            //stop = TestShared.TestReentrantFairLock.Run();
-            //stop = TestShared.TestReentrantLock.Run();
-            //stop = TestShared.TestReentrantReadWriteLock.Run();
-            //stop = TestShared.TestRegisteredTake.Run();
-            //stop = TestShared.TestRegisteredWait.Run();
-            //stop = TestShared.TestRendezvousChannel.Run();
-            //stop = TestShared.TestSemaphore.Run();
-            //stop = TestShared.TestSemaphores.Run();
-            //stop = TestShared.TestStreamBlockingQueue.Run();
-            //stop = TestShared.TestSynchronizationEvent.Run();
-            //stop = TestShared.TestTimer.Run();
+            VConsole.WriteLine("+++ stopping...");
+            stop();
 
-            //VConsole.WriteLine("+++ hit <enter> to terminate...");
-            //Console.ReadLine();
-            //stop();
-            //VConsole.Write("+++hit <enter> to exit...");
-            //Console.ReadLine();
+            VConsole.Write("+++ press any key to exit...");
+            Console.ReadLine();
+        }
 
-            //ExchangerTest.Run();
-            ExchangerAsyncTest.Run();
+        static void Main() {
+            RunTestFor<StNotificationEvent>(Timeout.Infinite);
         }
     }
 }
