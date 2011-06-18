@@ -180,37 +180,20 @@ namespace SlimThreading {
         // Waits until the event is signalled, using the specified parker object.
         //
 
-        internal WaitBlock WaitWithParker(StParker pk, WaitType type, int key, ref int sc)
-        {
+        internal WaitBlock WaitWithParker(StParker pk, WaitType type, int key, ref int sc) {
             WaitBlock wb = null;
             do {
                 WaitBlock s;
                 if ((s = state) == SET) {
-
-                    //
-                    // The event is signalled. Try to lock it and self unpark the current thread. 
-                    // Anyway, return null to signal that no wait block was queued.
-                    //
-
                     if (pk.TryLock()) {
                         pk.UnparkSelf(key);
                     }
                     return null;
                 }
 
-                //
-                // The event seems closed; so, if this is the first loop iteration,
-                // create a wait block.
-                //
-
                 if (wb == null) {
                     wb = new WaitBlock(pk, type, 0, key);
                 }
-
-                //
-                // Try to insert the wait block in the event's queue, if the
-                // event remains non-signalled.
-                //
 
                 wb.next = s;
                 if (Interlocked.CompareExchange(ref state, wb, s) == s) {
@@ -279,6 +262,24 @@ namespace SlimThreading {
             : this(initialState, 0) { }
 
         //
+        // Waits until the event is signalled, activating the specified cancellers.
+        //
+
+        public bool Wait(StCancelArgs cargs) {
+            int ws = waitEvent.Wait(cargs);
+            if (ws == StParkStatus.Success) {
+                return true;
+            }
+            
+            StCancelArgs.ThrowIfException(ws);
+            return false;
+        }
+
+        public void Wait() {
+            Wait(StCancelArgs.None);
+        }
+
+        //
         // StWaitable methods.
         //
 
@@ -291,7 +292,7 @@ namespace SlimThreading {
         }
 
         //
-        // Returns true if the event is signalled else return false.
+        // Returns true if the event is signalled.
         //
 
         internal override bool _TryAcquire() {
@@ -562,7 +563,6 @@ namespace SlimThreading {
         public StNotificationEvent() 
             : this(false, 0) { }
 
-
         //
         // Sets the event to the signalled state.
         //
@@ -577,24 +577,6 @@ namespace SlimThreading {
 
         public bool Reset() {
             return waitEvent.Reset();
-        }
-
-        //
-        // Waits until the event is signalled, activating the specified cancellers.
-        //
-
-        public bool Wait(StCancelArgs cargs) {
-            int ws = waitEvent.Wait(cargs);
-            if (ws == StParkStatus.Success) {
-                return true;
-            }
-            
-            StCancelArgs.ThrowIfException(ws);
-            return false;
-        }
-
-        public void Wait() {
-            Wait(StCancelArgs.None);
         }
 
         //

@@ -61,22 +61,12 @@ namespace SlimThreading {
                 if (waitEvent.IsSet) {
                     return _value;
                 }
-                waitEvent.Wait(StCancelArgs.None);
+                Wait();
                 return _value;
             }
 
             set {
-
-                //
-                // Only the first setter defines the future's value.
-                //
-
                 if (wasSet == 0 && Interlocked.Exchange(ref wasSet, 1) == 0) {
-
-                    //
-                    // Set the future value and signal the associated event.
-                    //
-
                     _value = value;
                     waitEvent.Set();
                     return;

@@ -21,7 +21,6 @@ using System.Threading;
 namespace SlimThreading {
 
 	public sealed class StCountDownEvent : StNotificationEventBase {
-
         private volatile int count;
 
         public StCountDownEvent(int count, int spinCount) : base(count == 0, spinCount) {
