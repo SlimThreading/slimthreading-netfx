@@ -43,19 +43,12 @@ namespace SlimThreading {
         //
 
         public bool Wait(out T result, StCancelArgs cargs) {
-            if (waitEvent.IsSet) {
+            if (Wait(cargs)) {
                 result = _value;
                 return true;
             }
 
-            int ws = waitEvent.Wait(cargs);
-            if (ws == StParkStatus.Success) {
-                result = _value;
-                return true;
-            }
-            
             result = default(T);
-            StCancelArgs.ThrowIfException(ws);
             return false;
         }
 

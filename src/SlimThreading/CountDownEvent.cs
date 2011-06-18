@@ -20,11 +20,7 @@ using System.Threading;
 
 namespace SlimThreading {
 
-	//
-	// This class implements a count down event.
-	//
-
-    public sealed class StCountDownEvent : StNotificationEventBase {
+	public sealed class StCountDownEvent : StNotificationEventBase {
 
         private volatile int count;
 
@@ -35,23 +31,26 @@ namespace SlimThreading {
         public StCountDownEvent(int count) : this (count, 0) { }
 
         //
+        // Returns the current value of te count down event.
+        //
+
+        public int Value {
+            get { return count; }
+        }
+
+        //
         // Signals with the specified amount.
         //
 
         public bool Signal(int n) {
 	        do {
-                int c;
-                int nc = (c = count) - n;
+                int c = count;
+                int nc = c - n;
 		        if (nc < 0) {
                     throw new InvalidOperationException();
 		        }
                 if (Interlocked.CompareExchange(ref count, nc, c) == c) {
-
-                    //
-			        // If the counter reaches zero, signal the associatted event.
-                    //
-
-			        if (c == n) {
+			        if (nc == 0) {
                         waitEvent.Set();
                         return true;
 			        }
@@ -77,6 +76,7 @@ namespace SlimThreading {
             if (n <= 0) {
                 throw new ArgumentOutOfRangeException("n");
             }
+
             do {
                 int c;
                 if ((c = count) == 0) {
@@ -100,35 +100,9 @@ namespace SlimThreading {
             return TryAdd(1);
         }
 
-        //
-        // Returns the current value of te count down event.
-        //
-
-        public int Value {
-            get { return count; }
-        }
-
-        //
-		// Waits until the count down event reaches zero, activating
-        // the specified cancellers.
-		//
-
-        public bool Wait(StCancelArgs cargs) {
-            int ws = waitEvent.Wait(cargs);
-            if (ws == StParkStatus.Success) {
-                return true;
-            }
-
-            StCancelArgs.ThrowIfException(ws);
-            return false;
-        }
-
-        //
-        // Waits unconditionally until the count down event reaches zero.
-        //
-
-        public bool Wait() {
-            return Wait(StCancelArgs.None);
+        internal override bool _Release() {
+            Signal(1);
+            return true;
         }
     }
 }
