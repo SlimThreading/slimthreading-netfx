@@ -632,32 +632,10 @@ namespace SlimThreading {
 		internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
                                                      ref WaitBlock ignored, ref int sc) {
 			if (TryEnterWriteInternal()) {
-
-				//
-				// We entered the write lock; so,  try to lock the parker and,
-                // if succeed, self unpark the current thread.
-                //
-
-                if (pk.TryLock()) {
-                    pk.UnparkSelf(key);
-                } else {
-
-                    //
-                    // The parker is already locked, so release the write lock,
-                    // undoing the previous acquire.
-                    //
-
-                    ExitWrite();
-                }
 				return null;
 			}
 
-			//
-			// Create a wait block, enqueue it as a enter lock request and
-            // return the inserted wait block.
-			//
-
-            WaitBlock wb = new WaitBlock(pk, WaitType.WaitAny, ENTER_WRITE, key);
+			var wb = new WaitBlock(pk, WaitType.WaitAny, ENTER_WRITE, key);
             sc = EnqueueEnterWrite(wb);
 			return wb;
 		}
@@ -668,25 +646,11 @@ namespace SlimThreading {
 
         internal override WaitBlock _WaitAllPrologue(StParker pk,
                                                      ref WaitBlock ignored, ref int sc) {
-           if (_AllowsAcquire) {
-
-                //
-                // The lock can be acquired; so, lock the parker and, if this is
-                // the last cooperative release, unpark the current thread.
-                //
-
-                if (pk.TryLock()) {
-                    pk.UnparkSelf(StParkStatus.StateChange);
-                }
+            if (_AllowsAcquire) {
                 return null;
             }
 
-            //
-            // Create a wait-all wait block, enqueue it as an enter write
-            // lock request and return the inserted wait block.
-            //
-
-            WaitBlock wb = new WaitBlock(pk, WaitType.WaitAll, ENTER_WRITE, StParkStatus.StateChange);
+            var wb = new WaitBlock(pk, WaitType.WaitAll, ENTER_WRITE, StParkStatus.StateChange);
             sc = EnqueueEnterWrite(wb);
             return wb;
         }

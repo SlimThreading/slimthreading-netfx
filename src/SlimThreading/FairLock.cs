@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
-using System;
-using System.Threading;
 
 #pragma warning disable 0420
 
@@ -25,47 +23,32 @@ namespace SlimThreading {
 
     public sealed class StFairLock : Mutant, IMonitorLock {
 
-        //
-        // Constructors.
-        //
-
-        public StFairLock(int spinCount) : base(true, spinCount) {}
+        public StFairLock(int spinCount) : base(true, spinCount) { }
 
         public StFairLock() : base(true, 0) { }
 
         //
-        // Tries to enter the lock immediately.
+        // Tries to enter the lock immediately. Remark: does not block.
         //
 
         public bool TryEnter() {
-
-            return (head.next == SET &&
-                    Interlocked.CompareExchange<WaitBlock>(ref head.next, null, SET) == SET);
+            return _TryAcquire();
         }
 
         //
         // Tries to enter the lock, activating the specified cancellers.
         //
 
-        public bool TryEnter(StCancelArgs cargs) {
-            if (head.next == SET &&
-                Interlocked.CompareExchange<WaitBlock>(ref head.next, null, SET) == SET) {
-                return true;
-            }
-            return (cargs.Timeout != 0) ? SlowTryAcquire(cargs) : false;
+        public bool Enter(StCancelArgs cargs) {
+            return Acquire(cargs);
         }
 
-        //
         //
         // Enters the lock unconditionally.
         //
 
         public void Enter() {
-            if (head.next == SET &&
-                Interlocked.CompareExchange<WaitBlock>(ref head.next, null, SET) == SET) {
-                return;
-            }
-            SlowTryAcquire(StCancelArgs.None);
+            Acquire(StCancelArgs.None);
         }
 
         //
@@ -73,52 +56,25 @@ namespace SlimThreading {
         //
 
         public void Exit() {
-
-            //
-            // If the queue is empty, release the lock immediately.
-            //
-
-            if (head.next == null &&
-                Interlocked.CompareExchange<WaitBlock>(ref head.next, SET, null) == null) {
-                return;
-            }
-
-            SlowRelease();
+            Release();
         }
 
-        /*++
-         *
-         * IMonitorLock interface implementation.
-         *
-         --*/
-
-        //
-        // Returns true if the lock is busy.
-        //
+        #region IMonitorLock
 
         bool IMonitorLock.IsOwned {
-            get { return (head.next != SET); }
+            get { return !_AllowsAcquire; }
         }
-
-        //
-        // Exits the lock.
-        //
 
         int IMonitorLock.ExitCompletely() {
             Exit();
             return 0;
         }
 
-        //
-        // Reacquires the lock.
-        //
-
         void IMonitorLock.Reenter(int waitStatus, int ignored) {
-
+            
             //
-            // If the wait on condition variable wasn't cancelled,
-            // the lock is already owned by the current thread; otherwise,
-            // we must do an acquire.
+            // If the wait on the condition variable was successful, the lock is
+            // owned by the current thread; otherwise, we must do a full acquire.
             //
 
             if (waitStatus != StParkStatus.Success) {
@@ -126,20 +82,10 @@ namespace SlimThreading {
             }
         }
 
-        //
-        // Enqueues the specified wait block in the lock's queue
-        // as a locked acquire request.
-        //
-
         void IMonitorLock.EnqueueWaiter(WaitBlock wb) {
             EnqueueLockedWaiter(wb);
         }
-        //
-        // Return the exception that must be thrown when the release fails.
-        //
 
-        internal override Exception _SignalException {
-            get { return new StSynchronizationLockException(); }
-        }
+        #endregion
     }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
-using System;
-using System.Threading;
 
 #pragma warning disable 0420
 
@@ -24,13 +22,9 @@ namespace SlimThreading {
     //
 
     public sealed class StSynchronizationEvent : Mutant {
-
-        //
-        // Constructors.
-        //
-
-        public StSynchronizationEvent(bool initialState, int spinCount) :
-                        base(initialState, spinCount) {}
+        
+        public StSynchronizationEvent(bool initialState, int spinCount) 
+            : base(initialState, spinCount) { }
 
         public StSynchronizationEvent(bool initialState) : base(initialState, 0) { }
 
@@ -40,19 +34,9 @@ namespace SlimThreading {
         // Waits until the event is signalled, activating the specified
         // cancellers.
         //
-
+         
         public bool Wait(StCancelArgs cargs) {
-
-            //
-            // If the event is signalled, try to reset it and, if succed,
-            // return success. Otherwise, wait on the mutant.
-            //
-
-            if (head.next == SET &&
-                Interlocked.CompareExchange<WaitBlock>(ref head.next, null, SET) == SET) {
-                return true;
-            }
-            return (cargs.Timeout != 0) ? SlowTryAcquire(cargs) : false;
+            return Acquire(cargs);
         }
 
         //
@@ -60,34 +44,16 @@ namespace SlimThreading {
         //
 
         public void Wait() {
-
-            //
-            // If the event is signalled, try to reset it and, if succed,
-            // return success. Otherwise, wait on the mutant.
-            //
-
-            if (head.next == SET &&
-                Interlocked.CompareExchange<WaitBlock>(ref head.next, null, SET) == SET) {
-                return;
-            }
-            SlowTryAcquire(StCancelArgs.None);
+            Acquire(StCancelArgs.None);
         }
 
         //
         // Sets the event to the signalled state and returns the
-        // previous event's state.
+        // previous state.
         //
 
         public bool Set() {
-            WaitBlock n;
-            if ((n = head.next) == SET) {
-                return true;
-            }
-            if (n == null &&
-                Interlocked.CompareExchange<WaitBlock>(ref head.next, SET, null) == null) {
-                return false;
-            }
-            return SlowRelease();
+            return Release();
         }
 
         //
@@ -96,8 +62,7 @@ namespace SlimThreading {
         //
 
         public bool Reset() {
-            return (head.next == SET &&
-                    Interlocked.CompareExchange<WaitBlock>(ref head.next, null, SET) == SET);
+            return _TryAcquire();
         }
     }
 }

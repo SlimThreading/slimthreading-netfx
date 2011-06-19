@@ -75,7 +75,7 @@ namespace TestShared {
                 do {
                     if ((localRandom % 100) < P) {
                         try {
-                            while (!flock.TryEnter(new StCancelArgs(1, shutdown))) {
+                            while (!flock.Enter(new StCancelArgs(1, shutdown))) {
                                 //while (!flock.WaitOne(new StCancelArgs(1, shutdown))) {
                                 //while (StWaitable.WaitAny(new StWaitable[] { flock },
                                 //                    new StCancelArgs(1, shutdown)) != StParkStatus.Success) {

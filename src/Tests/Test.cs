@@ -17,11 +17,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using SlimThreading;
+using TestShared;
 
 namespace Tests {
     static class Test {
         private static readonly Dictionary<Type, Func<Action>> tests = new Dictionary<Type, Func<Action>> {
-            { typeof(StNotificationEvent), NotificationEventTest.Run }    
+            { typeof(StNotificationEvent), NotificationEventTest.Run },
+            { typeof(StFairLock), TestFairLock.Run },
         };
 
         public static void RunTestFor<T>(int timeout) {
@@ -42,7 +44,7 @@ namespace Tests {
         }
 
         static void Main() {
-            RunTestFor<StNotificationEvent>(Timeout.Infinite);
+            RunTestFor<StFairLock>(10000);
         }
     }
 }

@@ -490,21 +490,19 @@ namespace SlimThreading {
             return true;
         }
 
+        internal override void _UndoAcquire() {
+            ExitWrite();
+        }
+
         //
         // Executes the prologue of the Waitable.WaitAny method.
         //
 
         internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
                                                      ref WaitBlock hint, ref int sc) {
-            if (FastTryEnterWrite(Thread.CurrentThread.ManagedThreadId)) {
-                if (pk.TryLock()) {
-                    pk.UnparkSelf(key);
-                } else {
-                    ExitWrite();
-                }
-                return null;
-            }
-            return rwlock._WaitAnyPrologue(pk, key, ref hint, ref sc);
+            return FastTryEnterWrite(Thread.CurrentThread.ManagedThreadId) 
+                 ? null 
+                 : rwlock._WaitAnyPrologue(pk, key, ref hint, ref sc);
         }
 
         //
@@ -513,13 +511,7 @@ namespace SlimThreading {
 
         internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock hint,
                                                      ref int sc) {
-            if (_AllowsAcquire) {
-                if (pk.TryLock()) {
-                    pk.UnparkSelf(StParkStatus.StateChange);
-                }
-                return null;
-            }
-            return rwlock._WaitAllPrologue(pk, ref hint, ref sc);
+            return _AllowsAcquire ? null : rwlock._WaitAllPrologue(pk, ref hint, ref sc);
         }
 
         //

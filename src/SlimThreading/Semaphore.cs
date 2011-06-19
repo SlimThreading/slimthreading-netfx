@@ -246,15 +246,10 @@ namespace SlimThreading {
         //
 
         private int EnqueueAcquire(WaitBlock wb, int acquireCount) {
-
-            //
-            // Enqueue the wait block in the semaphore's queue.
-            //
-
             bool isFirst = queue.Enqueue(wb);
 
             //
-            // if the wait block was inserted at front of the semaphore's
+            // If the wait block was inserted at front of the semaphore's
             // queue, re-check if the current thread is at front of the
             // queue and can now acquire the requested permits; if so,
             // try lock the queue and execute the release processing.
@@ -264,11 +259,7 @@ namespace SlimThreading {
                 ReleaseWaitersAndUnlockQueue();
             }
 
-            //
-            // Return the number of spin cycles.
-            //
-
-            return (isFirst ? spinCount : 0);
+            return isFirst ? spinCount : 0;
         }
 
 		//
@@ -411,49 +402,11 @@ namespace SlimThreading {
 
         internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
                                                      ref WaitBlock ignored, ref int sc) {
-            //
-            // Try to acquire one permit.
-            //
-
-       	    if (TryAcquireInternal(1)) {
-
-                //
-                // We acquireed one permite. So try to lock the parker
-                // and, if succeed, self unpark the current thread with
-                // the specified *key*.
-                //
-
-
-                if (pk.TryLock()) {
-                    pk.UnparkSelf(key);
-                } else {
-
-                    //
-                    // The parker was already locked, so we should undo the
-                    // previous acquire releasing one permit.
-                    //
-
-                    UndoAcquire(1);
-                    if (IsReleasePending) {
-                        ReleaseWaitersAndUnlockQueue();
-                    }
-                }
-
-                //
-                // Return null because no wait block was inserted on the
-                // semaphore's wait queue.
-                //
-
-				return null;
+            if (TryAcquireInternal(1)) {
+                return null;
 			}
 
-			//
-			// There are no permits available, so create a wait block that
-            // used the specified parker, insert it in semaphore's queue and
-            // return the inserted wait block.
-			//
-
-            WaitBlock wb = new WaitBlock(pk, WaitType.WaitAny, 1, key);
+			var  wb = new WaitBlock(pk, WaitType.WaitAny, 1, key);
             sc = EnqueueAcquire(wb, 1);
 			return wb;
 		}
@@ -464,38 +417,13 @@ namespace SlimThreading {
         
         internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock ignored,
                                                      ref int sc) {
-
-            //
-            // Check if the semaphore's state allows to acquire one permit.
-            //
-            
             if (_AllowsAcquire) {
-
-				//
-				// Lock the parker and, if this is the last cooperative release,
-                // self unpark the current thread.
-                //
-
-                if (pk.TryLock()) {
-                    pk.UnparkSelf(StParkStatus.StateChange);
-                }
-				return null;
+                return null;
 			}
 
-			//
-			// There are no permits available on the semaphore; so, create
-            // a wait block, insert it in semaphore's queue and return
-            // the wait block.
-			//
-
-            WaitBlock wb = new WaitBlock(pk, WaitType.WaitAll, 1, StParkStatus.StateChange);
+			var wb = new WaitBlock(pk, WaitType.WaitAll, 1, StParkStatus.StateChange);
             sc = EnqueueAcquire(wb, 1);
-
-            //
-			// Return the inserted wait block.
-			//
-		
-			return wb;
+            return wb;
 		}
 
         //
@@ -523,9 +451,7 @@ namespace SlimThreading {
         //
 
         internal override Exception _SignalException {
-            get {
-                return new StSemaphoreFullException();
-            }
+            get { return new StSemaphoreFullException(); }
         }
 	}
 }

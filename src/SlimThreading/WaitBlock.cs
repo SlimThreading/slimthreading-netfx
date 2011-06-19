@@ -65,6 +65,7 @@ namespace SlimThreading {
         internal const int LOCKED_REQUEST  = (1 << 31);
         internal const int SPECIAL_REQUEST = (1 << 30);
         internal const int MAX_REQUEST = (SPECIAL_REQUEST - 1);
+        internal const int NO_REQUEST = 0;
         internal volatile int request;
 
         //
@@ -84,21 +85,12 @@ namespace SlimThreading {
             waitKey = StParkStatus.Success;
         }
 
-        //
-        // Full specified constructor.
-        //
-
-
         internal WaitBlock(StParker pk, WaitType t, int r, int k) {
             parker = pk;
             waitType = t;
             request = r;
             waitKey = k;
         }
-
-        //
-        // Convenience constructors.
-        //
 
         internal WaitBlock(WaitType t, int r, int k) {
             parker = new StParker();
@@ -134,110 +126,6 @@ namespace SlimThreading {
 
         internal bool CasNext(WaitBlock n, WaitBlock nn) {
             return (next == n && Interlocked.CompareExchange<WaitBlock>(ref next, nn, n) == n);
-        }
-    }
-
-    //
-    // A non-thread-safe queue of wait blocks.
-    //
-
-    internal struct WaitBlockQueue {
-
-        //
-        // The first and last wait blocks.
-        //
-
-        internal WaitBlock head;
-        private WaitBlock tail;
-
-        //
-        // Clears the queue.
-        //
-
-        internal void Clear() {
-            head = tail = null;
-        }
-
-        //
-        // Enqueues a wait block at the tail of the queue.
-        //
-
-        internal void Enqueue(WaitBlock wb) {
-            if (head == null) {
-                head = wb;
-            } else {
-                tail.next = wb;
-            }
-            tail = wb;
-        }
-
-        //
-        // Enqueues a wait block at head of the queue.
-        //
-
-        internal void EnqueueHead(WaitBlock wb) {
-            if ((wb.next = head) == null) {
-                tail = wb;
-            }
-            head = wb;
-        }
-
-        //
-        // Dequeues a wait node from a non-empty queue.
-        //
-
-        internal WaitBlock Dequeue() {
-            WaitBlock wb = head;
-            if ((head = wb.next) == null) {
-                tail = null;
-            }
-            wb.next = wb;       // Mark the wait block as unlinked.
-            return wb;
-        }
-
-        //
-        // Returns true if the queue is empty.
-        //
-
-        internal bool IsEmpty { get { return head == null; } }
-
-        //
-        // Removes the specified wait node from the queue.
-        //
-
-        internal void Remove(WaitBlock wb) {
-
-            //
-            // If the wait block was already unlinked, return.
-            //
-
-            if (wb.next == wb) {
-                return;
-            }
-
-            //
-            // Compute the previous wait block and perform the removal.
-            //
-
-            WaitBlock p = head;
-            WaitBlock pv = null;
-            while (p != null) {
-                if (p == wb) {
-                    if (pv == null) {
-                        if ((head = wb.next) == null) {
-                            tail = null;
-                        }
-                    } else {
-                        if ((pv.next = wb.next) == null)
-                            tail = pv;
-                    }
-                    wb.next = wb;
-                    return;
-                }
-                pv = p;
-                p = p.next;
-            }
-            throw new InvalidOperationException();
         }
     }
 

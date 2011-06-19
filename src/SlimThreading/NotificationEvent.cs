@@ -121,17 +121,9 @@ namespace SlimThreading {
             return false;
         }
 
-        //
-        // Resets the event to the non-signalled state.
-        //
-
         internal bool Reset() {
             return state == SET && Interlocked.CompareExchange(ref state, null, SET) == SET;
         }
-
-        //
-        // Waits until the event is signalled, activating the specified cancellers.
-        //
 
         internal int Wait(StCancelArgs cargs) {
             return state == SET ? StParkStatus.Success
@@ -141,11 +133,6 @@ namespace SlimThreading {
 
         private int SlowWait(StCancelArgs cargs, WaitBlock wb) {
             do {
-
-                //
-                // If the event is now signalled, return success.
-                //
-
                 WaitBlock s;
                 if ((s = state) == SET) {
                     return StParkStatus.Success;
@@ -157,17 +144,7 @@ namespace SlimThreading {
                 }
             } while (true);
 
-            //
-            // Park the current thread, activating the specified cancellers and spinning
-            // if appropriate.
-            //
-
             int ws = wb.parker.Park(wb.next == null ? spinCount : 0, cargs);
-
-            //
-            // If the wait was cancelled, unlink the wait block from the
-            // event's queue.
-            //
 
             if (ws != StParkStatus.Success) {
                 Unlink(wb);
@@ -185,9 +162,6 @@ namespace SlimThreading {
             do {
                 WaitBlock s;
                 if ((s = state) == SET) {
-                    if (pk.TryLock()) {
-                        pk.UnparkSelf(key);
-                    }
                     return null;
                 }
 
@@ -197,11 +171,6 @@ namespace SlimThreading {
 
                 wb.next = s;
                 if (Interlocked.CompareExchange(ref state, wb, s) == s) {
-
-                    //
-                    // Return the inserted wait block and the suggested spin count.
-                    //
-
                     sc = s == null ? spinCount : 0;
                     return wb;
                 }
@@ -213,18 +182,22 @@ namespace SlimThreading {
         //
 
         internal void Unlink(WaitBlock wb) {
+
+            //
+            // We can return immediately if the queue is empty or if the WaitBlock
+            // is the only one in it and we succeeded in removing it. 
+            //
+
             WaitBlock s;
-            if ((s = state) == SET || s == null ||
-                (wb.next == null && s == wb &&
-                 Interlocked.CompareExchange(ref state, null, s) == s)) {
+            if ((s = state) == SET || s == null || (wb.next == null && s == wb &&
+                Interlocked.CompareExchange(ref state, null, s) == s)) {
                 return;
             }
             SlowUnlink(wb);
         }
 
         //
-        // Slow path to unlink the wait block from the event's
-        // wait queue.
+        // Slow path to unlink the wait block from the event's wait queue.
         //
 
         void SlowUnlink(WaitBlock wb) {
@@ -250,7 +223,6 @@ namespace SlimThreading {
     /// Notifies one or more waiting threads that an event has occurred.
     /// </summary>
     public abstract class StNotificationEventBase : StWaitable {
-
         internal NotificationEvent waitEvent;
         
         protected StNotificationEventBase(bool initialState, int sc) {
@@ -278,10 +250,6 @@ namespace SlimThreading {
         public void Wait() {
             Wait(StCancelArgs.None);
         }
-
-        //
-        // StWaitable methods.
-        //
 
         //
         // Returns true if the event is signalled.

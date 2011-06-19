@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
-using System.Threading;
 
 namespace SlimThreading {
 
     //
     // The interface that is implemented by the locks that can be
-    // used as monitor's lock with condition variables.
+    // used as the monitor lock by condition variables.
     //
 
     internal interface IMonitorLock {
@@ -31,33 +31,17 @@ namespace SlimThreading {
 
 	//
 	// This class implements a condition variable that can be used
-    // with the locks that implement the IMonitorLock interface.
+    // with any lock that implement the IMonitorLock interface.
 	//
 
 	public sealed class StConditionVariable {
-		
-		//
-		// The monitor lock.
-		//
-		
-		private IMonitorLock mlock;
-
-		//
-		// The condition's queue.
-		//
-
-		private WaitBlockQueue queue;
-
-		//
-		// Constructors.
-		//
+		private readonly IMonitorLock mlock;
+        private WaitBlockQueue queue;
 
 		private StConditionVariable(IMonitorLock mlock) {
 			this.mlock = mlock;
 			queue = new WaitBlockQueue();
 		}
-
-        private StConditionVariable(StLock mlock) : this((IMonitorLock)mlock) { }
 
         public StConditionVariable(StReentrantLock mlock) : this((IMonitorLock)mlock) { }
 
@@ -74,33 +58,10 @@ namespace SlimThreading {
 		//
 
 		public void Pulse() {
-
-            //
-            // Ensure that the current thread is the owner of the monitor's lock.
-            //
-
-            if (!mlock.IsOwned) {
-                throw new StSynchronizationLockException();
-            }
-
-            //
-            // Try to release a thread blocked on the condition's queue.
-            //
+            EnsureIsOwned();
 
             WaitBlock w;        
-            while ((w = queue.head) != null) {
-                queue.Dequeue();
-                if (w.parker.TryLock()) {
-
-                    //
-                    // Move the locked wait block to the monitor lock's queue
-                    // and return.
-                    //
-
-                    mlock.EnqueueWaiter(w);
-                    return;
-                }
-            }
+            while ((w = queue.Dequeue()) != null && !TryEnqueue(w)) ;
 		}
 
 		//
@@ -108,32 +69,11 @@ namespace SlimThreading {
 		//
 
 		public void PulseAll() {
+            EnsureIsOwned();
 
-            //
-            // Ensure that the current thread is the owner of the monitor's lock.
-            //
-
-            if (!mlock.IsOwned) {
-                throw new StSynchronizationLockException();
-            }
-
-			WaitBlock w;
-            if ((w = queue.head) != null) {
-                WaitBlock n;
-                do {
-                    n = w.next;
-                    if (w.parker.TryLock()) {
-
-                        //
-                        // Move the locked wait block to the lock's queue.
-                        //
-
-                        mlock.EnqueueWaiter(w);
-                    } else {
-                        w.next = w;
-                    }
-                } while ((w = n) != null);
-                queue.Clear();
+		    WaitBlock w;
+            while ((w = queue.Dequeue()) != null) {
+                TryEnqueue(w);
             }
         }
 
@@ -143,62 +83,20 @@ namespace SlimThreading {
 		//
 
 		public bool Wait(StCancelArgs cargs) {
-
-            //
-            // Ensure that the current thread is the owner of the monitor's lock.
-            //
-
-            if (!mlock.IsOwned) {
-                throw new StSynchronizationLockException();
-            }
-
-            //
-            // If a null timeout was specified, return failure.
-            //
-
-            if (cargs.Timeout == 0) {
-                return false;
-            }
-
-            //
-			// Create a wait block and insert it in the condition's queue.
-			//
+            EnsureIsOwned();
 
             WaitBlock wb;
             queue.Enqueue(wb = new WaitBlock(WaitType.WaitAny));
 
-			//
-			// Release the associated lock, saving its state.
-			//
-
 			int lockState = mlock.ExitCompletely();
-
-			//
-			// Park the current thread, activating the specified cancellers.
-			//
-
-			int ws = wb.parker.Park(cargs);
-
-			//
-			// Re-enter the monitor's lock.
-			//
-
-			mlock.Reenter(ws, lockState);
-
-            //
-            // If we were notified, return success.
-            //
+            int ws = wb.parker.Park(cargs);
+            mlock.Reenter(ws, lockState);
 
             if (ws == StParkStatus.Success) {
                 return true;
             }
 
-			//
-			// The wait was cancelled; so, remove the wait block from
-            // the wait queue and report the failure appropriately.
-			//
-
-            queue.Remove(wb);
+			queue.Remove(wb);
             StCancelArgs.ThrowIfException(ws);
             return false;
 		}
@@ -210,5 +108,97 @@ namespace SlimThreading {
         public void Wait() {
             Wait(StCancelArgs.None);
         }
+
+        private void EnsureIsOwned() {
+            if (!mlock.IsOwned) {
+                throw new StSynchronizationLockException();
+            }
+        }
+
+        private bool TryEnqueue(WaitBlock w) {
+            if (w.parker.TryLock()) {
+
+                //
+                // Move the locked wait block to the lock's queue.
+                //
+
+                mlock.EnqueueWaiter(w);
+                return true;
+            }
+            
+            //
+            // Mark the WaitBlock as unlinked so that WaitBlockQueue::Remove 
+            // returns immediately.
+            //
+
+            w.next = w;
+            return false;
+        }
 	}
+
+    //
+    // A non-thread-safe queue of wait blocks.
+    //
+
+    internal struct WaitBlockQueue {
+        internal WaitBlock head;
+        private WaitBlock tail;
+
+        internal void Enqueue(WaitBlock wb) {
+            if (head == null) {
+                head = wb;
+            } else {
+                tail.next = wb;
+            }
+            tail = wb;
+        }
+
+        internal WaitBlock Dequeue() {
+            WaitBlock wb;
+            if ((wb = head) == null) {
+                return null;
+            }
+
+            if ((head = wb.next) == null) {
+                tail = null;
+            }
+            return wb;
+        }
+
+        internal void Remove(WaitBlock wb) {
+
+            //
+            // Return immediately if the wait block has been unlinked.
+            //
+
+            if (wb.next == wb) {
+                return;
+            }
+
+            //
+            // Compute the previous wait block and perform the removal.
+            //
+
+            WaitBlock p = head;
+            WaitBlock pv = null;
+            while (p != null) {
+                if (p == wb) {
+                    if (pv == null) {
+                        if ((head = wb.next) == null) {
+                            tail = null;
+                        }
+                    } else {
+                        if ((pv.next = wb.next) == null)
+                            tail = pv;
+                    }
+                    wb.next = wb;
+                    return;
+                }
+                pv = p;
+                p = p.next;
+            }
+            
+            throw new InvalidOperationException();
+        }
+    }
 }

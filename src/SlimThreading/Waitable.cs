@@ -148,28 +148,15 @@ namespace SlimThreading {
         //
 
         public bool WaitOne(StCancelArgs cargs) {
-
-            //
-            // Try to acquire and, if succeed, return success.
-            //
-
             if (_TryAcquire()) {
                 return true;
             }
-
-            //
-            // Return failure, if a null timeout was specified.
-            //
 
             if (cargs.Timeout == 0) {
                 return false;
             }
 
-            //
-            // Create a parker and execute the WaitAny prologue.
-            //
-
-            StParker pk = new StParker();
+            var pk = new StParker();
             WaitBlock hint = null;
             int sc = 0;
             WaitBlock wb;
@@ -177,27 +164,12 @@ namespace SlimThreading {
                 return true;
             }
 
-            //
-            // Park the current thread, activating the specified cancellers
-            // and spinning if appropriate.
-            //
-
             int ws = pk.Park(sc, cargs);
-
-            //
-            // If the acquire succeed; so, execute the Wait epilogue
-            // and return success.
-            //
 
             if (ws == StParkStatus.Success) {
                 _WaitEpilogue();
                 return true;
             }
-
-            //
-            // The acquire was cancelled; so, cancel the acquire attempt
-            // and report the failure appropriately.
-            //
 
             _CancelAcquire(wb, hint);
             StCancelArgs.ThrowIfException(ws);
@@ -307,6 +279,11 @@ namespace SlimThreading {
             for (int i = 0; !pk.IsLocked && i < len; i++) {
                 StWaitable w = ws[i];
                 if ((wbs[i] = w._WaitAnyPrologue(pk, i, ref hints[i], ref sc)) == null) {
+                    if (pk.TryLock()) {
+                        pk.UnparkSelf(i);
+                    } else {
+                        w._UndoAcquire();
+                    }
                     break;
                 }
 
@@ -612,12 +589,11 @@ namespace SlimThreading {
                     int gsc = 1;
                     int sc = 0;
                     for (int i = 0; i < len; i++) {
-                        if ((wbs[i] = sws[i]._WaitAllPrologue(pk, ref hints[i], ref sc)) != null) {
-
-                            //
-                            // Adjust the global spin count.
-                            //
-
+                        if ((wbs[i] = sws[i]._WaitAllPrologue(pk, ref hints[i], ref sc)) == null) {
+                            if (pk.TryLock()) {
+                                pk.UnparkSelf(StParkStatus.StateChange);
+                            }
+                        } else {
                             if (gsc != 0) {
                                 if (sc == 0) {
                                     gsc = 0;
