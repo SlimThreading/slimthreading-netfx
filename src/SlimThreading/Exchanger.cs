@@ -78,22 +78,8 @@ namespace SlimThreading {
             }
         }
 
-		//
-		// The exchange point.
-		//
-
 		internal volatile WaitNode xchgPoint;
-
-        //
-        // The number of spin cycles executed by a waiter thread
-        // before it blocks on the park spot.
-        //
-
         private readonly int spinCount;
-
-        //
-        // Constructors.
-        //
 
         public StExchanger(int spinCount) {
             this.spinCount = Platform.IsMultiProcessor ? spinCount : 0;
@@ -101,68 +87,86 @@ namespace SlimThreading {
 
         public StExchanger() { }
 
+        public static bool ExchangeAny(StExchanger<T>[] xchgs, T myData, out T yourData, StCancelArgs cargs) {
+            int len = xchgs.Length;
+
+            for (int i = 0; i < len; i++) {
+                if (xchgs[i].TryExchange(myData, out yourData)) {
+                    return true;
+                }
+            }
+
+            yourData = default(T);
+
+            if (cargs.Timeout == 0) {
+                return false;
+            }
+
+            var pk = new StParker(1);
+            var wn = new WaitNode(pk, myData);
+            int lv = -1;
+            int gsc = 0;
+
+            for (int i = 0; !pk.IsLocked && i < len; i++) {
+                StExchanger<T> xchg = xchgs[i];
+
+                if (xchg.TryExchange(wn, myData, out yourData)) {
+                    break;
+                }
+
+                //
+                // Adjust the global spin count.
+                //
+
+                int sc = xchg.spinCount;
+                if (gsc < sc) {
+                    gsc = sc;
+                }
+                
+                lv = i;
+            }
+            
+            int wst = pk.Park(gsc, cargs);
+            
+            for (int i = 0; i <= lv; i++) {
+                xchgs[i].CancelExchange(wn);
+            }
+
+            if (wst == StParkStatus.Success) {
+                return true;
+            }
+
+            StCancelArgs.ThrowIfException(wst);
+            return false;
+        }
+
 		//
 		// Exchanges a data item, activating the specified cancellers.
 		//
 
 		public bool Exchange(T myData, out T yourData, StCancelArgs cargs) {
-            WaitNode wn = null;
+            if (TryExchange(myData, out yourData)) {
+                return true;
+            }
 
-			do {
+		    var pk = new StParker();
+            var wn = new WaitNode(pk, myData);
+            if (TryExchange(wn, myData, out yourData)) {
+                return true;
+            }
 
-                if (TryExchange(myData, out yourData)) {
-                    return true;
-                }
-
-			    //
-                // No thread is waiting; if this is the first iteration, check
-                // if a null timeout was specified and, if so, return failure;
-                // if not, create a wait node to signal our presence in the
-                // exchange point.
-                //
-
-                if (wn == null) {
-                    if (cargs.Timeout == 0) {
-                        return false;
-                    }
-                    wn = new WaitNode(new StParker(), myData);
-                }
-
-                if (Interlocked.CompareExchange(ref xchgPoint, wn, null) == null) {
-                    break;
-                }
-            } while (true);
-
-            //
-            // Park the current thread, activating the specified cancellers
-            // and spinning for the configured amount.
-            //
-
-            int ws = wn.Parker.Park(spinCount, cargs);
-
-            //
-            // If successful, retrieve the data item from the wait node.
-            //
-
+            int ws = pk.Park(spinCount, cargs);
             if (ws == StParkStatus.Success) {
                 yourData = wn.Channel;
                 return true;
             }
 
-            //
-            // The exchange was cancelled; so, try to remove our wait node
-            // from the exchange point and report the failure appropriately.
-            //
-
-            if (xchgPoint == wn) {
-                Interlocked.CompareExchange(ref xchgPoint, null, wn);
-            }
-
+            CancelExchange(wn);
             StCancelArgs.ThrowIfException(ws);
             return false;
         }
 
-        //
+	    //
         // Exchanges a data item asynchronously. The specified callback gets called
         // when the exchange completes and is passed the received data item.
         //      
@@ -178,37 +182,33 @@ namespace SlimThreading {
                 throw new ArgumentNullException("callback");
             }
 
+            T yourData;
+            if (TryExchange(myData, out yourData)) {
+                ThreadPool.QueueUserWorkItem(_ => callback(state, yourData, false));
+                return new ExchangeRegistration();
+            }
+            
             state = state ?? this;
             WaitNode wn = null;
-            CbParker cbparker = null;
-
-            do {
-                T yourData;
-                if (TryExchange(myData, out yourData)) {
-                    ThreadPool.QueueUserWorkItem(_ => callback(state, yourData, false));
-                    return new ExchangeRegistration();
+            var cbparker = new CbParker(ws => {
+                if (ws != StParkStatus.Success && xchgPoint == wn) {
+                    Interlocked.CompareExchange(ref xchgPoint, null, wn);
                 }
-
-                if (wn == null) {
-                    cbparker = new CbParker(ws => {
-                        if (ws != StParkStatus.Success && xchgPoint == wn) {
-                            Interlocked.CompareExchange(ref xchgPoint, null, wn);
-                        }
                         
-                        if (ws != StParkStatus.WaitCancelled) {
-                            callback(state, wn.Channel, ws == StParkStatus.Timeout);
-                        }
-                    });
-                    wn = new WaitNode(cbparker, myData);
+                if (ws != StParkStatus.WaitCancelled) {
+                    callback(state, wn.Channel, ws == StParkStatus.Timeout);
                 }
+            });
+            wn = new WaitNode(cbparker, myData);
 
-                if (Interlocked.CompareExchange(ref xchgPoint, wn, null) == null) {
-                    break;
-                }
-            } while (true);
+            if (TryExchange(wn, myData, out yourData)) {
+                ThreadPool.QueueUserWorkItem(_ => callback(state, yourData, false));
+                return new ExchangeRegistration();                
+            }
 
             var timer = timeout != Timeout.Infinite ? new RawTimer(cbparker) : null;
             int waitStatus = cbparker.EnableCallback(timeout, timer);
+            
             if (waitStatus != StParkStatus.Pending) {
                 ThreadPool.QueueUserWorkItem(_ => callback(state, wn.Channel, waitStatus == StParkStatus.Timeout));
                 return new ExchangeRegistration();
@@ -216,11 +216,7 @@ namespace SlimThreading {
             return new ExchangeRegistration(cbparker);
         }
         
-        //
-        // Tries to exchange the data item with a waiter.
-        //
-
-        private bool TryExchange(T myData, out T yourData) {
+       private bool TryExchange(T myData, out T yourData) {
             WaitNode you;
 
             //
@@ -241,5 +237,29 @@ namespace SlimThreading {
             yourData = default(T);
             return false;
         }
+
+        private bool TryExchange(WaitNode wn, T myData, out T yourData) {
+			do {
+                if (TryExchange(myData, out yourData)) {
+                    return true;
+                }
+
+                if (Interlocked.CompareExchange(ref xchgPoint, wn, null) == null) {
+                    return false;
+                }
+            } while (true);
+        }
+
+        private void CancelExchange(WaitNode wn) {
+            
+            //
+            // The exchange was cancelled; so, try to remove our wait node
+            // from the exchange point and report the failure appropriately.
+            //
+
+	        if (xchgPoint == wn) {
+	            Interlocked.CompareExchange(ref xchgPoint, null, wn);
+	        }
+	    }
 	}
 }
