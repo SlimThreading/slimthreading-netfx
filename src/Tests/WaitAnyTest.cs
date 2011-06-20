@@ -126,7 +126,7 @@ namespace Tests {
                 VConsole.WriteLine("+++ Total: rels = {0}, acqs = {1}", rels, acqs);
 
                 foreach (StSemaphore sem in sems) {
-                    while (sem.WaitOne(1, new StCancelArgs(0))) {
+                    while (sem.Wait(1, new StCancelArgs(0))) {
                         acqs += 1;
                     }
                 }

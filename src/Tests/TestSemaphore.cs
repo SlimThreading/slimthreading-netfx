@@ -94,8 +94,8 @@ namespace TestShared {
                 VConsole.WriteLine("+++ a #{0} started...", id);
                 do {
                     try {
-                        while (!s.WaitOne(1, new StCancelArgs((id & 1) + 1, shutdown))) {
-                            //while (!s.WaitOne(new StCancelArgs((n & 1) + 1, shutdown))) {
+                        while (!s.Wait(1, new StCancelArgs((id & 1) + 1, shutdown))) {
+                            //while (!s.Wait(new StCancelArgs((n & 1) + 1, shutdown))) {
                             //while (StWaitable.WaitAny(ws, new StCancelArgs((n & 1) + 1, shutdown)) == StParkStatus.Timeout) {
                             //while (!StWaitable.WaitAll(ws, new StCancelArgs((n & 1) + 10, shutdown))) {
                             if (shutdown.IsSet) {

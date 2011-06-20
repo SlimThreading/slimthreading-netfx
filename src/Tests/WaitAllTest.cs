@@ -43,7 +43,7 @@ namespace Tests {
                     Thread.Sleep(0);
                     sem2.Release(1);
                     sem3.Release(1);
-                    if (sem1.WaitOne(1, new StCancelArgs(0))) { 
+                    if (sem1.Wait(1, new StCancelArgs(0))) { 
                         Thread.Sleep(0);
                         sem1.Release(1);
                     }
