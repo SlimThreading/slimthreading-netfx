@@ -57,12 +57,12 @@ namespace SlimThreading {
         }
     }
 
-	//
-	// This class implements an exchange point, through which threads
+    //
+    // This class implements an exchange point, through which threads
     // can exchange generic data items.
-	//
+    //
 
-	public sealed class StExchanger<T> {
+    public sealed class StExchanger<T> {
 
         //
         // The wait node used with the exchanger.
@@ -78,7 +78,7 @@ namespace SlimThreading {
             }
         }
 
-		internal volatile WaitNode xchgPoint;
+        internal volatile WaitNode xchgPoint;
         private readonly int spinCount;
 
         public StExchanger(int spinCount) {
@@ -140,16 +140,16 @@ namespace SlimThreading {
             return false;
         }
 
-		//
-		// Exchanges a data item, activating the specified cancellers.
-		//
+        //
+        // Exchanges a data item, activating the specified cancellers.
+        //
 
-		public bool Exchange(T myData, out T yourData, StCancelArgs cargs) {
+        public bool Exchange(T myData, out T yourData, StCancelArgs cargs) {
             if (TryExchange(myData, out yourData)) {
                 return true;
             }
 
-		    var pk = new StParker();
+            var pk = new StParker();
             var wn = new WaitNode(pk, myData);
             if (TryExchange(wn, myData, out yourData)) {
                 return true;
@@ -166,7 +166,7 @@ namespace SlimThreading {
             return false;
         }
 
-	    //
+        //
         // Exchanges a data item asynchronously. The specified callback gets called
         // when the exchange completes and is passed the received data item.
         //      
@@ -239,7 +239,7 @@ namespace SlimThreading {
         }
 
         private bool TryExchange(WaitNode wn, T myData, out T yourData) {
-			do {
+            do {
                 if (TryExchange(myData, out yourData)) {
                     return true;
                 }
@@ -257,9 +257,9 @@ namespace SlimThreading {
             // from the exchange point and report the failure appropriately.
             //
 
-	        if (xchgPoint == wn) {
-	            Interlocked.CompareExchange(ref xchgPoint, null, wn);
-	        }
-	    }
-	}
+            if (xchgPoint == wn) {
+                Interlocked.CompareExchange(ref xchgPoint, null, wn);
+            }
+        }
+    }
 }
