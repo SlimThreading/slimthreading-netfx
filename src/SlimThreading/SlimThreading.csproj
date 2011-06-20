@@ -76,7 +76,6 @@
     <Compile Include="UnboundedBlockingQueue.cs" />
     <Compile Include="Waitable.cs" />
     <Compile Include="WaitBlock.cs" />
-    <Compile Include="WaitBlockExtensions.cs" />
     <Compile Include="WaitHandleExtensions.cs" />
     <Compile Include="WorkStealingQueue.cs" />
   </ItemGroup>
