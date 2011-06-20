@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,18 +21,25 @@ namespace SlimThreading {
 
     //
     // This value type implements a lock designed to synchronize
-    // once initialization.
+    // one-time-only initialization.
     //
 
     public struct StInitOnceLock {
 
         //
-        // Distinguished values used for the lock state.
+        // Distinct values used for the lock state. The lock starts in the FREE
+        // state. When a thread first calls TryInit the state advances to BUSY.
+        // All subsequent calls to TryInit will block. The thread must complete
+        // the initialization and call InitCompleted, advancing the state to 
+        // AVAILABLE and unparking all waiting threads. If the initialization 
+        // fails then the thread must call InitFailed to unpark a waiter thread 
+        // that will retry the initialization, becoming responsible for advancing
+        // the lock's state. If there are no waiters the state reverts back to FREE.
         //
 
         private const StParker FREE = null;
-        private static readonly StParker BUSY = new StParker();
-        private static readonly StParker AVAILABLE = new StParker();
+        private static readonly SentinelParker BUSY = new SentinelParker();
+        private static readonly SentinelParker AVAILABLE = new SentinelParker();
 
         //
         // Status values used when the waiter threads are released.
@@ -48,35 +55,56 @@ namespace SlimThreading {
         private volatile StParker state;
 
         //
-        // Acquires the init once lock and returns true to signal that
-        // the current thread must perform the initialization;
-        // otherwise, return false which means that the target is
-        // already available.
+        // Acquires the init once lock. Returns true to signal that the current
+        // thread must perform the initialization or false which means that the 
+        // target is already available.
         //
 
         public bool TryInit(int spinCount) {
-            if (state == AVAILABLE) {
-                return false;
-            }
-            return SlowTryInit(spinCount);
+            return state != AVAILABLE && SlowTryInit(spinCount);
         }
 
         public bool TryInit() {
-            if (state == AVAILABLE) {
-                return false;
-            }
-            return SlowTryInit(0);
+            return state != AVAILABLE && SlowTryInit(0);
         }
 
         //
-        // Slow pass of the TryInitEx method.
+        // Signals that the initialization is completed.
         //
+
+        public void InitCompleted() {
+            var p = Interlocked.Exchange(ref state, AVAILABLE);
+            while (p != BUSY) {
+                p.Unpark(STATUS_AVAILABLE);
+                p = p.pnext;
+            }
+        }
+
+        //
+        // Signals that initialization failed.
+        //
+
+        public void InitFailed() {
+            do {
+                StParker p;
+
+                if ((p = state) == BUSY &&
+                    Interlocked.CompareExchange(ref state, FREE, BUSY) == BUSY) {
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref state, p.pnext, p) == p) {
+                    p.Unpark(STATUS_INIT);
+                    return;
+                }
+            } while (true);
+        }
 
         private bool SlowTryInit(int spinCount) {
             StParker s;
             do {
                 if ((s = state) == FREE &&
-                    Interlocked.CompareExchange<StParker>(ref state, BUSY, FREE) == FREE) {
+                    Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
                     return true;
                 }
                 if (s == AVAILABLE) {
@@ -93,17 +121,18 @@ namespace SlimThreading {
             // and insert it in the wait queue, if the lock remains busy.
             //
 
-            StParker pk = new StParker(0);
+            var pk = new StParker(0);
             do {
-                if ((s = state) == AVAILABLE) {
-                    return false;
-                }
-                if (s == FREE &&
-                    Interlocked.CompareExchange<StParker>(ref state, BUSY, FREE) == FREE) {
+                if ((s = state) == FREE &&
+                    Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
                     return true;
                 }
+                if (s == AVAILABLE) {
+                    return false;
+                }
+
                 pk.pnext = s;
-                if (Interlocked.CompareExchange<StParker>(ref state, pk, s) == s) {
+                if (Interlocked.CompareExchange(ref state, pk, s) == s) {
                     break;
                 }
             } while (true);
@@ -113,49 +142,7 @@ namespace SlimThreading {
             // appropriate value.
             //
 
-            return (pk.Park() == STATUS_INIT);
-        }
-
-        //
-        // Signals that the initialization is completed.
-        //
-
-        public void InitCompleted() {
-            StParker p = Interlocked.Exchange<StParker>(ref state, AVAILABLE);
-            while (p != BUSY) {
-                p.Unpark(STATUS_AVAILABLE);
-                p = p.pnext;
-            }
-        }
-
-        //
-        // Signals that initialization failed.
-        //
-
-        public void InitFailed() {
-            do {
-                StParker p;
-
-                //
-                // if the wait list is empty, free the lock.
-                //
-
-                if ((p = state) == BUSY &&
-                    Interlocked.CompareExchange<StParker>(ref state, FREE, BUSY) == BUSY) {
-                    return;
-                }
-
-                //
-                // It seems that there are waiter threads; so, try to
-                // release one of them to retry the initialization of
-                // the target.
-                //
-
-                if (Interlocked.CompareExchange<StParker>(ref state, p.pnext, p) == p) {
-                    p.Unpark(STATUS_INIT);
-                    return;
-                }
-            } while (true);
+            return pk.Park() == STATUS_INIT;
         }
     }
 }
