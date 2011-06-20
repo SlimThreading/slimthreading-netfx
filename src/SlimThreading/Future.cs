@@ -43,7 +43,7 @@ namespace SlimThreading {
         //
 
         public bool Wait(out T result, StCancelArgs cargs) {
-            if (WaitOne(cargs)) {
+            if (waitEvent.Wait(cargs) == StParkStatus.Success) {
                 result = _value;
                 return true;
             }
@@ -61,7 +61,7 @@ namespace SlimThreading {
                 if (waitEvent.IsSet) {
                     return _value;
                 }
-                WaitOne();
+                waitEvent.Wait(StCancelArgs.None);
                 return _value;
             }
 
