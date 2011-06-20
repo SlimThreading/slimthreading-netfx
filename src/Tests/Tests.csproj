@@ -63,6 +63,7 @@
     <Compile Include="TestStreamBlockingQueue.cs" />
     <Compile Include="TestSynchronizationEvent.cs" />
     <Compile Include="TestTimer.cs" />
+    <Compile Include="TestWorkStealingQueue.cs" />
     <Compile Include="VConsole.cs" />
     <Compile Include="WaitAllTest.cs" />
     <Compile Include="WaitAnyTest.cs" />

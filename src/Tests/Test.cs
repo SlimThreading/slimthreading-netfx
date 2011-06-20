@@ -14,21 +14,14 @@
 //  
 
 using System;
-using System.Collections.Generic;
 using System.Threading;
-using SlimThreading;
-using TestShared;
 
 namespace Tests {
     static class Test {
-        private static readonly Dictionary<Type, Func<Action>> tests = new Dictionary<Type, Func<Action>> {
-            { typeof(StNotificationEvent), NotificationEventTest.Run },
-            { typeof(StFairLock), TestFairLock.Run },
-        };
-
-        public static void RunTestFor<T>(int timeout) {
+        
+        public static void Run<T>(int timeout) {
             Thread.CurrentThread.Priority = ThreadPriority.Highest;
-            Action stop = tests[typeof(T)]();
+            Action stop = (Action) typeof(T).GetMethod("Run").Invoke(null, new object[0]);
             if (timeout == Timeout.Infinite) {
                 VConsole.WriteLine("+++ press any key to terminate...");
                 Console.ReadLine();
@@ -44,7 +37,7 @@ namespace Tests {
         }
 
         static void Main() {
-            RunTestFor<StFairLock>(10000);
+            Run<WaitAnyTest>(10000);
         }
     }
 }
