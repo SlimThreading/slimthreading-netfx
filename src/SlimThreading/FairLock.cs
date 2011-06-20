@@ -28,30 +28,6 @@ namespace SlimThreading {
         public StFairLock() : base(true, 0) { }
 
         //
-        // Tries to enter the lock immediately. Remark: does not block.
-        //
-
-        public bool TryEnter() {
-            return _TryAcquire();
-        }
-
-        //
-        // Tries to enter the lock, activating the specified cancellers.
-        //
-
-        public bool Enter(StCancelArgs cargs) {
-            return Acquire(cargs);
-        }
-
-        //
-        // Enters the lock unconditionally.
-        //
-
-        public void Enter() {
-            Acquire(StCancelArgs.None);
-        }
-
-        //
         // Exits the lock.
         //
 
@@ -78,7 +54,7 @@ namespace SlimThreading {
             //
 
             if (waitStatus != StParkStatus.Success) {
-                Enter();
+                WaitOne();
             }
         }
 

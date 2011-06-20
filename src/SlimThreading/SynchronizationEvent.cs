@@ -31,23 +31,6 @@ namespace SlimThreading {
         public StSynchronizationEvent() : base(false, 0) { }
 
         //
-        // Waits until the event is signalled, activating the specified
-        // cancellers.
-        //
-         
-        public bool Wait(StCancelArgs cargs) {
-            return Acquire(cargs);
-        }
-
-        //
-        // Waits unconditionaly until the event is signalled.
-        //
-
-        public void Wait() {
-            Acquire(StCancelArgs.None);
-        }
-
-        //
         // Sets the event to the signalled state and returns the
         // previous state.
         //

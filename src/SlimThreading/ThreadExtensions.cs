@@ -13,11 +13,21 @@
 // limitations under the License.
 //  
 
-namespace SlimThreading {    
-    public static class ThreadExtensions {
+using System;
 
-        public static IParkSpotFactory ParkSpotFactory {
-            get { return EventBasedParkSpotFactory.Current; }
+namespace SlimThreading {    
+    public class ThreadExtensions {
+        [ThreadStatic]
+        private static ThreadExtensions current;
+        private IParkSpotFactory factory;
+        
+        public static ThreadExtensions ForCurrentThread {
+            get { return current ?? (current = new ThreadExtensions()); }
+        }
+
+        public IParkSpotFactory ParkSpotFactory {
+            get { return factory ?? (factory = EventBasedParkSpotFactory.Current); }
+            set { factory = value; }
         }
     }
 }

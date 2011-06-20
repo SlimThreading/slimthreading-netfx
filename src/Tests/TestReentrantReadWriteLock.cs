@@ -146,7 +146,7 @@ namespace TestShared {
 
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long rds = 0, wrs = 0;
                 for (int i = 0; i < READERS; i++) {
                     rds += reads[i];

@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -24,19 +25,10 @@ namespace SlimThreading {
     //
 
     public sealed class StLock : IMonitorLock {
-
-        //
-        // Request type used for normal lock acquire requests.
-        //
-
         private const int ACQUIRE = 1;
         private const int LOCKED_ACQUIRE = (WaitBlock.LOCKED_REQUEST | ACQUIRE);
 
-        //
-		// The lock state.
-		//
-
-		internal const int FREE = 0;
+        internal const int FREE = 0;
         internal const int BUSY = 1;
         internal volatile int state;
  
@@ -51,11 +43,7 @@ namespace SlimThreading {
         // a wait block in the lock's queue and blocks.
 		//
 
-		private int spinCount;
-
-        //
-        // Constructors.
-        //
+		private readonly int spinCount;
 
         public StLock(int sc) {
             spinCount = Platform.IsMultiProcessor ? sc : 0;
@@ -77,75 +65,7 @@ namespace SlimThreading {
         //
 
         public void Enter() {
-            if (state == FREE &&
-                Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
-                return;
-            }
-            SlowEnter();
-        }
-
-        //
-        // Tries to acquires a busy lock.
-        //
-
-        private void SlowEnter() {
-            WaitBlock wb = null;
-            do {
-
-                //
-                // First, try to acquire the lock spinning for the configured
-                // number of cycles, but only if the wait queue is empty.
-                //
-
-                int sc = spinCount;
-                do {
-                    if (state == FREE &&
-                        Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
-                        return;
-                    }
-                    if (top != null || sc-- <= 0) {
-                        break;
-                    }
-                    Platform.SpinWait(1);
-                } while (true);
-
-                //
-                // The lock is busy; so create a locked wait block, or
-                // reset the one previously allocated, and insert it in
-                // the wait queue.
-                //
-
-                if (wb == null) {
-                    wb = new WaitBlock(new StParker(0), LOCKED_ACQUIRE);
-                } else {
-                    wb.parker.Reset(0);
-                }
-                do {
-                    WaitBlock t;
-                    wb.next = (t = top);
-                    if (Interlocked.CompareExchange<WaitBlock>(ref top, wb, t) == t) {
-                        break;
-                    }
-                } while (true);
-
-                //
-                // Since that the lock can become free after we inserted
-                // the wait block, we must try to acquire it again, if it
-                // seems free.
-                //
- 
-                if (state == FREE &&
-                    Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
-                    return;
-                }
-
-                //
-                // Park the current thread before and, after it is release,
-                // retry to acquire the lock.
-                //
-
-                wb.parker.Park();
-            } while (true);
+            Enter(StCancelArgs.None);
         }
 
         //
@@ -153,19 +73,18 @@ namespace SlimThreading {
         // cancellers.
         //
 
-        public bool TryEnter(StCancelArgs cargs) {
-            if (state == FREE &&
-                Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
+        public bool Enter(StCancelArgs cargs) {
+            if (TryEnter()) {
                 return true;
             }
-            return (cargs.Timeout != 0) ? SlowTryEnter(cargs) : false;
+            return (cargs.Timeout != 0) ? SlowEnter(cargs) : false;
         }
 
         //
         // Tries to acquire a busy lock, activating the specified cancellers.
         //
 
-        private bool SlowTryEnter(StCancelArgs cargs) {
+        private bool SlowEnter(StCancelArgs cargs) {
 
 	        //
 	        // If a timeout was specified, get a time reference in order
@@ -216,8 +135,7 @@ namespace SlimThreading {
                 // seems free.
                 //
 
-                if (state == FREE &&
-                    Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
+                if (TryEnter()) {
                     return true;
                 }
 
@@ -241,8 +159,7 @@ namespace SlimThreading {
                 // Before adjust the timeout value, try to acquire the lock.
                 //
 
-			    if (state == FREE &&
-                    Interlocked.CompareExchange(ref state, BUSY, FREE) == FREE) {
+			    if (TryEnter()) {
                     return true;
                 }
             
@@ -264,11 +181,11 @@ namespace SlimThreading {
 		public void Exit() {
 
             //
-            // Since that atomic operations on references are more expensive
-            // than on integers, we try to optimize the release when the wait
-            // queue empty. However, when when the wait queue is empty before
-            // the lock is released, but it's seen non-empty after the lock is
-            // released, our algorithm resorts to two atomic instructions.
+            // Because atomic operations on references are more expensive than  
+            // on integers, we try to optimize the release when the wait queue 
+            // is empty. However, when the wait queue is seen as non-empty after 
+            // the lock is released, our algorithm resorts to another atomic 
+            // instruction in order to unoark pending waiters.
             //
 
             if (top == null) {
@@ -281,23 +198,22 @@ namespace SlimThreading {
             }
 
             //
-            // Unpark all waiting threads.
-            //
-            // NOTE: Since that the spin lock's queue is implemented with
-            //       a stack, we build another stack in order to unpark the
-            //       waiting thread according to its arrival order.
+            // Unpark all waiting threads. Because the spin lock's queue is implemented
+            // as a stack, we build another one in order to unpark the waiting threads 
+            // according to their arrival order.
             //
             
-            WaitBlock p = Interlocked.Exchange<WaitBlock>(ref top, null);
+            WaitBlock p = Interlocked.Exchange(ref top, null);
             WaitBlock ws = null, n;
             while (p != null) {
                 n = p.next;
-                if (p.request < 0 || p.parker.TryLock()) {
+                if (p.request == LOCKED_ACQUIRE || p.parker.TryLock()) {
                     p.next = ws;
                     ws = p;
                 }
                 p = n;
             }
+
             while (ws != null) {
                 n = ws.next;
                 ws.parker.Unpark(StParkStatus.Success);
@@ -305,32 +221,16 @@ namespace SlimThreading {
             }
 		}
 
-        /*++
-         * 
-         * IMonitorLock interface implementation.
-         * 
-         --*/
-
-        //
-        // Returns true if the lock is busy.
-        //
+        #region IMonitorLock
 
         bool IMonitorLock.IsOwned {
             get { return state == BUSY; }
         }
 
-        //
-        // Exits the lock.
-        //
-
         int IMonitorLock.ExitCompletely() {
             Exit();
             return 1;
         }
-
-        //
-        // Aquires the lock.
-        //
 
         void IMonitorLock.Reenter(int ignored, int ignored2) {
             Enter();
@@ -338,9 +238,8 @@ namespace SlimThreading {
 
         //
         // Enqueues the specified wait block in the lock's queue.
-        //
-        // NOTE: When this method is called, the lock is owned by
-        //       the current thread.
+        // When this method is called, the lock is owned by the 
+        // current thread.
         //
 
         void IMonitorLock.EnqueueWaiter(WaitBlock wb) {
@@ -348,10 +247,12 @@ namespace SlimThreading {
             do {
                 WaitBlock t;
                 wb.next = (t = top);
-                if (Interlocked.CompareExchange<WaitBlock>(ref top, wb, t) == t) {
+                if (Interlocked.CompareExchange(ref top, wb, t) == t) {
                     return;
                 }
             } while (true);
         }
+
+        #endregion
 	}
 }

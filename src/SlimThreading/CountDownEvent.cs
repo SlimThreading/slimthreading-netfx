@@ -103,5 +103,5 @@ namespace SlimThreading {
             Signal(1);
             return true;
         }
-    }
+	}
 }

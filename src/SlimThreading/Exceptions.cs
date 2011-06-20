@@ -30,7 +30,7 @@ namespace SlimThreading {
         // Constructors.
         //
 
-        public StThreadAlertedException() : base("Wait alerted") {}
+        public StThreadAlertedException() : base("WaitOne alerted") {}
 
         public StThreadAlertedException(string msg) : base(msg) {}
 

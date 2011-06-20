@@ -66,7 +66,7 @@ namespace Tests {
 
             return () => {
                 stop = 1;
-                done.Wait();
+                done.WaitOne();
                 long xs = 0;
 
                 for (int i = 0; i < EXCHANGERS; ++i) {

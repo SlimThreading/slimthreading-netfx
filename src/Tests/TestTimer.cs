@@ -142,7 +142,7 @@ namespace TestShared {
             return () => {
                 shutdown.Set();
                 int elapsed = Environment.TickCount - start;
-                done.Wait();
+                done.WaitOne();
             };
         }
     }

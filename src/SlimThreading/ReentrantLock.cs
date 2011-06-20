@@ -167,7 +167,7 @@ namespace SlimThreading {
                 return true;
             }
 
-            if (cargs.Timeout != 0 && nrlock.TryEnter(cargs)) {
+            if (cargs.Timeout != 0 && nrlock.Enter(cargs)) {
                 owner = tid;
                 return true;
             }

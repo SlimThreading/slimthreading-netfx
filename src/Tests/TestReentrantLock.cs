@@ -162,7 +162,7 @@ namespace TestShared {
             Action stop = () => {
                 shutdown.Set();
                 int elapsed = Environment.TickCount - start;
-                done.Wait();
+                done.WaitOne();
                 long total = 0;
                 for (int i = 0; i < THREADS; i++) {
                     total += counts[i];

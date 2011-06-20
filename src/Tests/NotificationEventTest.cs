@@ -44,7 +44,7 @@ namespace Tests {
                     count++;
                     index = (index + 1) & (RING_THREADS - 1);
                     evts[index].Set();
-                    evts[index].Wait(new StCancelArgs(shutdown));
+                    evts[index].WaitOne(new StCancelArgs(shutdown));
                 } while (!shutdown.IsSet);
             } catch (StThreadAlertedException) { }
 
@@ -85,12 +85,12 @@ namespace Tests {
                 new Thread(_ => GlobalThread(id, (id & 1) == 0)) { Name = "g #" + id }.Start();
 			}
 
-		    start.Wait();
+		    start.WaitOne();
 		    evts[0].Set();
 
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long t = 0;
                 for (int i = 0; i <RING_THREADS; i++) {
                     t += counts[i];

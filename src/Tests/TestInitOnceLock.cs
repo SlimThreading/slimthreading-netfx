@@ -127,7 +127,7 @@ namespace TestShared {
                     for (int i = 0; i < THREADS; i++) {
                         new InitializerThread().Start(i, "i #" + i);
                     }
-                    cycleDone.Wait();
+                    cycleDone.WaitOne();
                     lazySem = null;
                     //Thread.Sleep(1000);
                 } while (!shutdown.IsSet);
@@ -143,7 +143,7 @@ namespace TestShared {
             new Controller().Start(0, "c #0");
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
             };
             return stop;
         }

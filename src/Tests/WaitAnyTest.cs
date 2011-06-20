@@ -95,7 +95,7 @@ namespace Tests {
             }
         }
 
-        internal static Action Run() {
+        public static Action Run() {
             for (int i = 0; i < sems.Length; i++) {
                 sems[i] = new StSemaphore(0);
             }
@@ -113,7 +113,7 @@ namespace Tests {
 
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long rels = 0;
                 for (int i = 0; i < RELEASERS; i++) {
                     rels += releases[i];
@@ -126,7 +126,7 @@ namespace Tests {
                 VConsole.WriteLine("+++ Total: rels = {0}, acqs = {1}", rels, acqs);
 
                 foreach (StSemaphore sem in sems) {
-                    while (sem.Wait(1, new StCancelArgs(0))) {
+                    while (sem.WaitOne(1, new StCancelArgs(0))) {
                         acqs += 1;
                     }
                 }

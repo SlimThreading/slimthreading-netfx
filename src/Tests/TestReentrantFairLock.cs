@@ -75,7 +75,7 @@ namespace TestShared {
                 do {
                     if ((localRandom % 100) < P) {
                         try {
-                            while (!flock.Enter(new StCancelArgs(1, shutdown))) {
+                            while (!flock.WaitOne(new StCancelArgs(1, shutdown))) {
                                 //while (!flock.WaitOne(new StCancelArgs(1, shutdown))) {
                                 //while (StWaitable.WaitAny(new StWaitable[] { flock },
                                 //                    new StCancelArgs(1, shutdown)) != StParkStatus.Success) {
@@ -85,7 +85,7 @@ namespace TestShared {
                                 fail++;
                             }
                             for (int i = 1; i < REENTER; i++) {
-                                flock.Enter();
+                                flock.WaitOne();
                             }
                             localRandom = sharedRandom = r.Next();
                             for (int i = 0; i < REENTER; i++) {
@@ -120,7 +120,7 @@ namespace TestShared {
             Action stop = () => {
                 shutdown.Set();
                 int elapsed = Environment.TickCount - start;
-                done.Wait();
+                done.WaitOne();
                 long total = 0;
                 for (int i = 0; i < THREADS; i++) {
                     total += counts[i];

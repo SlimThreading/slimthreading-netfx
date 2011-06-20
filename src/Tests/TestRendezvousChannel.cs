@@ -191,7 +191,7 @@ namespace TestShared {
 
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
         	    long rs = 0;
 	            for (int i = 0; i < CLIENTS; i++) {
 		            rs += requests[i];

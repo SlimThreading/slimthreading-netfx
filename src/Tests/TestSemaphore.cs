@@ -94,7 +94,7 @@ namespace TestShared {
                 VConsole.WriteLine("+++ a #{0} started...", id);
                 do {
                     try {
-                        while (!s.Wait(1, new StCancelArgs((id & 1) + 1, shutdown))) {
+                        while (!s.WaitOne(1, new StCancelArgs((id & 1) + 1, shutdown))) {
                             //while (!s.WaitOne(new StCancelArgs((n & 1) + 1, shutdown))) {
                             //while (StWaitable.WaitAny(ws, new StCancelArgs((n & 1) + 1, shutdown)) == StParkStatus.Timeout) {
                             //while (!StWaitable.WaitAll(ws, new StCancelArgs((n & 1) + 10, shutdown))) {
@@ -131,7 +131,7 @@ namespace TestShared {
             }
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long rels = 0;
                 for (int i = 0; i < RELEASERS; i++) {
                     rels += releases[i];

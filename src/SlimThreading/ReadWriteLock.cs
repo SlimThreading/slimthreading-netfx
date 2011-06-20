@@ -255,7 +255,7 @@ namespace SlimThreading {
                     } else {
 
                         //
-                        // Wait-all.
+                        // WaitOne-all.
                         // If the write lock is free, lock the parker and, if this is
                         // the last cooperative release, unpark its owner thread.
                         //

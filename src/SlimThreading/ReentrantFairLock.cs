@@ -39,39 +39,10 @@ namespace SlimThreading {
             flock = new StFairLock();
         }
 
-        //
-        // Tries to enter the lock immediately.
-        //
-
-        public bool TryEnter() {
-            return TryEnter(Thread.CurrentThread.ManagedThreadId);
-        }
-
-        //
-        // Tries to enter the lock, activating the specified cancellers.
-        //
-
-        public bool Enter(StCancelArgs cargs) {
-            int tid = Thread.CurrentThread.ManagedThreadId;
-            
-            if (TryEnter(tid)) {
-                return true;
+        internal override bool _AllowsAcquire {
+            get { return flock._AllowsAcquire || 
+                         owner == Thread.CurrentThread.ManagedThreadId; 
             }
-
-            if (flock.Enter(cargs)) {
-                owner = tid;
-                return true;
-            }
-            
-            return false;
-        }
-
-        //
-        // Enters the lock unconditionally.
-        //
-
-        public void Enter() {
-            Enter(StCancelArgs.None);
         }
 
         //
@@ -92,8 +63,10 @@ namespace SlimThreading {
             flock.Exit();
         }
 
-        private bool TryEnter(int tid) {
-            if (flock.TryEnter()) {
+        internal override bool _TryAcquire() {
+            int tid = Thread.CurrentThread.ManagedThreadId;
+            
+            if (flock._TryAcquire()) {
                 owner = tid;
                 return true;
             }
@@ -102,8 +75,42 @@ namespace SlimThreading {
                 count++;
                 return true;
             }
-
+            
             return false;
+        }
+
+        internal override bool _Release() {
+            if (owner != Thread.CurrentThread.ManagedThreadId) {
+                return false;
+            }
+            Exit();
+            return true;
+        }
+
+        internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
+                                                     ref WaitBlock hint, ref int sc) {
+            return _TryAcquire() ? null : flock._WaitAnyPrologue(pk, key, ref hint, ref sc);
+        }
+
+        internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock hint,
+                                                     ref int sc) {
+            return _AllowsAcquire ? null : flock._WaitAllPrologue(pk, ref hint, ref sc);
+        }
+
+        internal override void _WaitEpilogue() {
+            owner = Thread.CurrentThread.ManagedThreadId;
+        }
+
+        internal override void _UndoAcquire() {
+            Exit();
+        }
+
+        internal override void _CancelAcquire(WaitBlock wb, WaitBlock hint) {
+            flock._CancelAcquire(wb, hint);
+        }
+
+        internal override Exception _SignalException {
+            get { return new StSynchronizationLockException(); }
         }
 
         #region IMonitorLock
@@ -128,16 +135,15 @@ namespace SlimThreading {
         void IMonitorLock.Reenter(int waitStatus, int pvCount) {
 
             //
-            // If the wait on the condition variable was successful, the lock is
-            // owned by the current thread but the "owner" field is not set; 
-            // otherwise, we must do a full acquire.
+            // If the wait on the condition variable failed, we must do a full acquire.
+            // Either way, we must set the "owner" field to the current thread.
             //
 
-            if (waitStatus == StParkStatus.Success) {
-                owner = Thread.CurrentThread.ManagedThreadId;
-            } else {
-                Enter();
+            if (waitStatus != StParkStatus.Success) {
+                flock.WaitOne();
             }
+
+            owner = Thread.CurrentThread.ManagedThreadId;
 
             //
             // Restore the previous state of the lock.
@@ -156,54 +162,6 @@ namespace SlimThreading {
             flock.EnqueueLockedWaiter(wb);
         }
 
-        #endregion
-
-        #region Waitable
-
-        internal override bool _AllowsAcquire {
-            get { return flock._AllowsAcquire || 
-                         owner == Thread.CurrentThread.ManagedThreadId; 
-            }
-        }
-
-        internal override bool _TryAcquire() {
-            return TryEnter();
-        }
-
-        internal override bool _Release() {
-            if (owner != Thread.CurrentThread.ManagedThreadId) {
-                return false;
-            }
-            Exit();
-            return true;
-        }
-
-        internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
-                                                     ref WaitBlock hint, ref int sc) {
-            return TryEnter() ? null : flock._WaitAnyPrologue(pk, key, ref hint, ref sc);
-        }
-
-        internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock hint,
-                                                     ref int sc) {
-            return _AllowsAcquire ? null : flock._WaitAllPrologue(pk, ref hint, ref sc);
-        }
-
-        internal override void _WaitEpilogue() {
-            owner = Thread.CurrentThread.ManagedThreadId;
-        }
-
-        internal override void _UndoAcquire() {
-            Exit();
-        }
-
-        internal override void _CancelAcquire(WaitBlock wb, WaitBlock hint) {
-            flock._CancelAcquire(wb, hint);
-        }
-
-        internal override Exception _SignalException {
-            get { return new StSynchronizationLockException(); }
-        }
-        
         #endregion
     }
 }

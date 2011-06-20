@@ -184,6 +184,14 @@ namespace SlimThreading {
             WaitOne(StCancelArgs.None);
         }
 
+        //
+        // Tries to acquire the waitable. Does not block the calling thread.
+        //
+
+        public bool TryWaitOne() {
+            return _TryAcquire();
+        }
+
         /// <summary>
         /// Waits until one of the specified waitables can be acquired,
         /// activating the specified cancellers. 
@@ -219,11 +227,8 @@ namespace SlimThreading {
             int len = ws.Length;
 
             for (int i = 0; i < hs.Length; i++) {
-                WaitHandle h = hs[i];
-                if (h != null) {
-                    if (h.WaitOne(0)) {
-                        return StParkStatus.Success + len + i;
-                    }
+                if (hs[i].WaitOne(0)) {
+                    return StParkStatus.Success + len + i;
                 }
             }
 
@@ -249,11 +254,8 @@ namespace SlimThreading {
             //
 
             for (int i = 0; i < len; i++) {
-                StWaitable w = ws[i];
-                if (w != null) {
-                    if (w._TryAcquire()) {
-                        return StParkStatus.Success + i;
-                    }
+                if (ws[i]._TryAcquire()) {
+                    return StParkStatus.Success + i;
                 }
             }
 
@@ -273,11 +275,13 @@ namespace SlimThreading {
                         : new StParker(1);
             WaitBlock[] wbs = new WaitBlock[len];
             WaitBlock[] hints = new WaitBlock[len];
+
             int lv = -1;
             int sc = 0;
             int gsc = 0;
             for (int i = 0; !pk.IsLocked && i < len; i++) {
                 StWaitable w = ws[i];
+
                 if ((wbs[i] = w._WaitAnyPrologue(pk, i, ref hints[i], ref sc)) == null) {
                     if (pk.TryLock()) {
                         pk.UnparkSelf(i);
@@ -332,8 +336,8 @@ namespace SlimThreading {
         //       grouped at the end of the sorted array.
         //
 
-        private static int SortAndCheckAllowAcquire(StWaitable[] ws, StWaitable[] sws) {
-            int i, jj;
+        private static int SortAndCheckAllowAcquire(StWaitable[] ws, StWaitable[] sws, out int nevts) {
+            int i;
             StWaitable w;
             bool acqAll = true;
             int len = ws.Length;
@@ -343,7 +347,7 @@ namespace SlimThreading {
             // in order to start insertion sort.
             //
 
-            jj = len;
+            nevts = len;
             for (i = 0; i < len; i++) {
                 w = ws[i];
                 acqAll &= w._AllowsAcquire;
@@ -355,7 +359,7 @@ namespace SlimThreading {
                 //
 
                 if (w.id == NOTIFICATION_EVENT_ID) {
-                    sws[--jj] = w;
+                    sws[--nevts] = w;
                 } else {
                     sws[0] = w;
                     break;
@@ -366,7 +370,7 @@ namespace SlimThreading {
             // If all synchronizers are notification events, return.
             //
 
-            if (i == len) {
+            if (nevts == 0) {
                 return acqAll ? 1 : 0;
             }
 
@@ -380,7 +384,7 @@ namespace SlimThreading {
                 w = ws[i];
                 acqAll &= w._AllowsAcquire;
                 if (w.id == NOTIFICATION_EVENT_ID) {
-                    sws[--jj] = w;
+                    sws[--nevts] = w;
                 } else {
 
                     //
@@ -525,11 +529,12 @@ namespace SlimThreading {
                 throw new ArgumentNullException("ws");
             }
 
+            int nevts;
             int len = ws.Length;
             StWaitable[] sws = new StWaitable[len];
             WaitHandle[] shs = null;
 
-            int waitHint = SortAndCheckAllowAcquire(ws, sws);
+            int waitHint = SortAndCheckAllowAcquire(ws, sws, out nevts);
             
             if (waitHint < 0) {
                 throw new ArgumentException("There are duplicate waitables", "ws");
@@ -544,6 +549,14 @@ namespace SlimThreading {
 
             if (waitHint != 0 && shs != null && !WaitHandle.WaitAll(shs, 0)) {
                 waitHint = 0;
+            }
+
+            //
+            // Return success if all synchronizers are notification events and are set.
+            //
+
+            if (waitHint != 0 && nevts == 0) {
+                return true;
             }
 
             if (waitHint == 0 && cargs.Timeout == 0) {
@@ -582,10 +595,6 @@ namespace SlimThreading {
                                                     Create(new WaitAllBehavior(shs)))
                                 : new StParker(len);
 
-                    //
-                    // Execute the WaitAll prologue on all waitables.
-                    //
-
                     int gsc = 1;
                     int sc = 0;
                     for (int i = 0; i < len; i++) {
@@ -593,13 +602,11 @@ namespace SlimThreading {
                             if (pk.TryLock()) {
                                 pk.UnparkSelf(StParkStatus.StateChange);
                             }
-                        } else {
-                            if (gsc != 0) {
-                                if (sc == 0) {
-                                    gsc = 0;
-                                } else if (sc > gsc) {
-                                    gsc = sc;
-                                }
+                        } else if (gsc != 0) {
+                            if (sc == 0) {
+                                gsc = 0;
+                            } else if (sc > gsc) {
+                                gsc = sc;
                             }
                         }
                     }
@@ -628,15 +635,11 @@ namespace SlimThreading {
                 //
                 // All waitables where we inserted wait blocks seem to allow 
                 // an immediate acquire operation; so, try to acquire all of
-                // them and, if specified, the wait handles.
-                //
-
-                //
-                // TODO: Break if we reach a notification event?
+                // them that are not notification events.
                 //
 
                 int idx;
-                for (idx = 0; idx < len; idx++) {
+                for (idx = 0; idx < nevts; idx++) {
                     if (!sws[idx]._TryAcquire()) {
                         break;
                     }
@@ -646,7 +649,7 @@ namespace SlimThreading {
                 // If all synchronizers were acquired, return success.
                 //
 
-                if (idx == len) {
+                if (idx == nevts) {
                     return true;
                 }
 
@@ -679,7 +682,7 @@ namespace SlimThreading {
         }
 
         //
-        // Wait unconditionally until all the specified waitables
+        // WaitOne unconditionally until all the specified waitables
         // allow the acquire.
         //
     
@@ -738,7 +741,7 @@ namespace SlimThreading {
             int ws = pk.Park(sc, cargs);
 
             //
-            // If we acquired, execute the Wait epilogue and return success.
+            // If we acquired, execute the WaitOne epilogue and return success.
             //
 
             if (ws == StParkStatus.Success) {

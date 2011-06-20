@@ -262,7 +262,7 @@ namespace SlimThreading {
             } while (true);
 
             //
-            // Wait on the phase event, activating the specified cancelers.
+            // WaitOne on the phase event, activating the specified cancelers.
             //
 
             int ws = phs.waitEvent.Wait(cargs);

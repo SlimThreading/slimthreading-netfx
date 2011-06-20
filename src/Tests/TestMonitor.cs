@@ -171,7 +171,7 @@ namespace TestShared {
 		}
 
 		public bool Offer(T data, StCancelArgs cargs) {
-			m.Enter();
+			m.WaitOne();
 			try {
 				if (buffer.Count < capacity) {
 					buffer.Enqueue(data);
@@ -201,7 +201,7 @@ namespace TestShared {
         }
 
 		public bool Poll(out T di, StCancelArgs cargs) {
-			m.Enter();
+			m.WaitOne();
 			try {
 				if (buffer.Count > 0) {
 					di = buffer.Dequeue();
@@ -347,7 +347,7 @@ namespace TestShared {
             }
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long rels = 0, acqs = 0;
                 for (int i = 0; i < RELEASERS; i++) {
                     rels += releases[i];
@@ -476,7 +476,7 @@ namespace TestShared {
             }
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long ps = 0, cs = 0;
                 for (int i = 0; i < PRODUCERS; i++) {
                     ps += prods[i];

@@ -115,7 +115,7 @@ namespace TestShared {
 
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 long ps = 0;
                 for (int i = 0; i < PRODUCERS; i++) {
                     ps += productions[i];

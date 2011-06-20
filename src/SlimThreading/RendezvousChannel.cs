@@ -79,7 +79,7 @@ namespace SlimThreading {
         }
 
         //
-        // Wait nodes used by the sender threads.
+        // WaitOne nodes used by the sender threads.
         //
 
         private class SendWaitNode<Q, P> : WaitNode {
@@ -98,7 +98,7 @@ namespace SlimThreading {
         }
 
         //
-        // Wait nodes used by the receiver threads.
+        // WaitOne nodes used by the receiver threads.
         //
 
         private class RecvWaitNode<Q, P> : WaitNode {

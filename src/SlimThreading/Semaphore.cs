@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
+
 using System;
 using System.Threading;
 
@@ -19,35 +20,15 @@ using System.Threading;
 
 namespace SlimThreading {
 
-	//
+    //
 	// This class implements a semaphore.
 	//
 
 	public sealed class StSemaphore : StWaitable {
-
-		//
-		// The semaphore's state and the wait queue.
-		//
-
         private volatile int state;
         private LockedWaitQueue queue;
-
-        //
-        // The maximum number of available permits.
-        //
-
-        private int maximumCount;
-	
-        //
-        // The number of spin cycles executed before block the
-        // first waiter thread on the semaphore.
-        //
-
-        private int spinCount;
-
-		//
-		// Constructors.
-		//
+        private readonly int maximumCount;
+        private readonly int spinCount;
 
 		public StSemaphore(int count, int maximumCount, int spinCount) {
             if (count < 0 || count > maximumCount) {
@@ -62,13 +43,144 @@ namespace SlimThreading {
             this.spinCount = Platform.IsMultiProcessor ? spinCount : 0;
 		}
 
-        public StSemaphore(int count, int maximumCount) : this(count, maximumCount, 0) {}
+        public StSemaphore(int count, int maximumCount) : this(count, maximumCount, 0) { }
 
-		public StSemaphore(int count) : this(count, Int32.MaxValue, 0) {}
+		public StSemaphore(int count) : this(count, Int32.MaxValue, 0) { }
+
+        internal override bool _AllowsAcquire {
+            get { return state != 0 && queue.IsEmpty; }
+        }
+
+        //
+        // If at least a waiter can be released, or the first is waiter is locked,
+        // returns true with the semaphore's queue locked; otherwise returns false.
+        //
+
+        private bool IsReleasePending {
+            get {
+                WaitBlock w = queue.First;
+                return w != null && (state >= w.request || w.parker.IsLocked) && queue.TryLock();
+            }
+        }
+
+        //
+		// Waits until acquire the specified number of permits, activating
+        // the specified cancellers.
+        //
+
+		public bool WaitOne(int acquireCount, StCancelArgs cargs) {
+            if (acquireCount <= 0 || acquireCount > maximumCount) {
+                throw new ArgumentException("acquireCount");
+            }
+
+			if (TryAcquireInternal(acquireCount)) {
+                return true;
+            }
+
+			if (cargs.Timeout == 0) {
+                return false;
+            }
+
+            var wb = new WaitBlock(WaitType.WaitAny, acquireCount);
+            int sc = EnqueueAcquire(wb, acquireCount);
+
+            int ws = wb.parker.Park(sc, cargs);
+            if (ws == StParkStatus.Success) {
+                return true;
+            }
+
+			CancelAcquire(wb);
+            StCancelArgs.ThrowIfException(ws);
+            return false;
+		}
+
+		//
+		// Waits unconditionally until acquire the specified number
+        // of permits.
+        //
+
+		public void WaitOne(int acount) {
+		    WaitOne(acount, StCancelArgs.None);
+        }
+        
+        //
+		// Releases the specified number permits.
+		//
+
+		public int Release(int rcount) {
+            if (rcount < 1) {
+                throw new ArgumentOutOfRangeException("rcount", "\"rcount\" must be positive");
+            }
+
+			//
+			// Upadate the semaphore's state and if there are waiters
+            // that can be released, execute the release processing.
+			//
+
+            int prevCount = state;
+            if (!ReleaseInternal(rcount)) {
+                throw new StSemaphoreFullException();
+            }
+            if (IsReleasePending) {
+                ReleaseWaitersAndUnlockQueue(null);
+            }
+            return prevCount;
+		}
+		
+		internal override bool _TryAcquire() {
+            return TryAcquireInternal(1);            
+        }
+
+        internal override bool _Release() {
+            if (!ReleaseInternal(1)) {
+                return false;
+            }
+            if (IsReleasePending) {
+                ReleaseWaitersAndUnlockQueue(null);
+            }
+            return true;
+        }
+
+        internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
+                                                     ref WaitBlock ignored, ref int sc) {
+            if (TryAcquireInternal(1)) {
+                return null;
+			}
+
+			var  wb = new WaitBlock(pk, WaitType.WaitAny, 1, key);
+            sc = EnqueueAcquire(wb, 1);
+			return wb;
+		}
+
+        internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock ignored,
+                                                     ref int sc) {
+            if (_AllowsAcquire) {
+                return null;
+			}
+
+			var wb = new WaitBlock(pk, WaitType.WaitAll, 1, StParkStatus.StateChange);
+            sc = EnqueueAcquire(wb, 1);
+            return wb;
+		}
+
+        internal override void _UndoAcquire() {
+            UndoAcquire(1);
+            if (IsReleasePending) {
+                ReleaseWaitersAndUnlockQueue(null);
+            }
+        }
+
+        internal override void _CancelAcquire(WaitBlock wb, WaitBlock ignored) {
+            CancelAcquire(wb);
+        }
+
+        internal override Exception _SignalException {
+            get { return new StSemaphoreFullException(); }
+        }
 
         //
 		// Tries to acquire the specified number of permits on behalf
-        // of the current thread.
+        // of the current thread if the queue is empty.
 		// 
 
 		private bool TryAcquireInternal(int acquireCount) {
@@ -84,11 +196,6 @@ namespace SlimThreading {
 			} while (true);
 		}
 
-		//
-		// Tries to acquire the specified number of permits on behalf
-		// of the thread that is at the front of the semaphore's queue.
-		// 
-
 		private bool TryAcquireInternalQueued(int acquireCount) {
 			do {
                 int s;
@@ -103,101 +210,43 @@ namespace SlimThreading {
 		}
 
         //
-        // Undoes a previous acquire.
+        // Only one thread act as a releaser at any given time.
         //
 
-        private void UndoAcquire(int undoCount) {
-            do {
-                int s = state;
-                if (Interlocked.CompareExchange(ref state, s + undoCount, s) == s) {
-                    return;
-                }
-            } while (true);
-        }
-
-		//
-		// Releases the specified number of permits.
-		//
-
-		private bool ReleaseInternal(int releaseCount) {
-            do {
-                int s;
-                int ns = (s = state) + releaseCount;
-                if (ns < 0 || ns > maximumCount) {
-                    return false;
-                }
-                if (Interlocked.CompareExchange(ref state, ns, s) == s) {
-                    return true;
-                }
-            } while (true);
-		}
-
-        //
-        // If at least a waiter can be released, returns true with the
-        // semaphore's queue locked; otherwise, returns false.
-        //
-
-        private bool IsReleasePending {
-            get {
-                WaitBlock w = queue.First;
-                return (w != null && (state >= w.request || w.parker.IsLocked) && queue.TryLock());
-            }
-        }
-
-        //
-		// Releases the appropriate waiters and unlocks the semaphore's queue.
-        //
-
-		private void ReleaseWaitersAndUnlockQueue() {
+		private void ReleaseWaitersAndUnlockQueue(WaitBlock self) {
 			do {
 				WaitBlock qh = queue.head;
                 WaitBlock w;
+
                 while (state > 0 && (w = qh.next) != null) {
                     StParker pk = w.parker;
+
                     if (w.waitType == WaitType.WaitAny) {
-
-                        //
-                        // Try to acquire the requested permits on behalf of the
-                        // queued waiter.
-                        //
-
                         if (!TryAcquireInternalQueued(w.request)) {
                             break;
                         }
 
-                        //
-                        // Try to lock the associated parker and, if succeed, unpark
-                        // its owner thread.
-                        //
-
                         if (pk.TryLock()) {
-                            pk.Unpark(w.waitKey);
+                            if (w == self) {
+                                pk.UnparkSelf(w.waitKey);
+                            } else {
+                                pk.Unpark(w.waitKey);
+                            }
                         } else {
-
-                            //
-                            // The acquire attempt was cancelled, so undo the
-                            // previous acquire.
-                            //  
-
                             UndoAcquire(w.request);
                         }
-                    } else {
-
-                        //
-                        // Wait-all: since that the semaphore seems to have at least
-                        // one available permit, lock the parker and, if this is the last
-                        // cooperative release, unpark its owner thread.
-                        //
-
-                        if (pk.TryLock()) {
+                    } else if (pk.TryLock()) {
+                        if (w == self) {
+                            pk.UnparkSelf(w.waitKey);
+                        } else {
                             pk.Unpark(w.waitKey);
                         }
                     }
 
                     //
                     // Remove the wait block from the semaphore's queue,
-                    // marking as unlink the previous heas, and advance the
-                    // local queues's head.
+                    // marking the previous head as unlinked, and advance 
+                    // the local queues's head.
                     //
 
                     qh.next = qh;
@@ -212,9 +261,8 @@ namespace SlimThreading {
 				queue.SetHeadAndUnlock(qh);
 
                 //
-                // If, after the semaphore's queue is unlocked, it seems
-                // that more waiters can be released, repeat the release
-                // processing.
+                // If after the semaphore's queue is unlocked, it seems that
+                // more waiters can be released, repeat the release processing.
                 //
 
                 if (!IsReleasePending) {
@@ -223,235 +271,56 @@ namespace SlimThreading {
 			} while (true);
 		}
 
-		//
-		// Cancels the specified acquire attempt.
-		//
+        private bool ReleaseInternal(int releaseCount) {
+            do {
+                int s;
+                int ns = (s = state) + releaseCount;
+                if (ns < 0 || ns > maximumCount) {
+                    return false;
+                }
+                if (Interlocked.CompareExchange(ref state, ns, s) == s) {
+                    return true;
+                }
+            } while (true);
+		}
 
-        private void CancelAcquire(WaitBlock wb) {
+        private int EnqueueAcquire(WaitBlock wb, int acquireCount) {
+	        bool isFirst = queue.Enqueue(wb);
+
+	        //
+	        // If the wait block was inserted at the front of the queue and
+	        // the current thread can now acquire the requested permits, try 
+	        // to lock the queue and execute the release processing.
+	        //
+
+	        if (isFirst && state >= acquireCount && queue.TryLock()) {
+	            ReleaseWaitersAndUnlockQueue(wb);
+	        }
+
+	        return isFirst ? spinCount : 0;
+	    }
+
+	    private void UndoAcquire(int undoCount) {
+	        do {
+	            int s = state;
+	            if (Interlocked.CompareExchange(ref state, s + undoCount, s) == s) {
+	                return;
+	            }
+	        } while (true);
+	    }
+
+	    private void CancelAcquire(WaitBlock wb) {
 
             //
             // If the wait block is still linked and it isn't the last wait block
-            // of the queue and the queue's lock is free unlink the wait block.
+            // in the queue and the queue's lock is free, unlink the wait block.
             //
 
             WaitBlock wbn;
             if ((wbn = wb.next) != wb && wbn != null && queue.TryLock()) {
                 queue.Unlink(wb);
-                ReleaseWaitersAndUnlockQueue();
+                ReleaseWaitersAndUnlockQueue(null);
             }
-        }
-
-        //
-        // Enqueues an acquire.
-        //
-
-        private int EnqueueAcquire(WaitBlock wb, int acquireCount) {
-            bool isFirst = queue.Enqueue(wb);
-
-            //
-            // If the wait block was inserted at front of the semaphore's
-            // queue, re-check if the current thread is at front of the
-            // queue and can now acquire the requested permits; if so,
-            // try lock the queue and execute the release processing.
-            //
-
-            if (isFirst && state >= acquireCount && queue.TryLock()) {
-                ReleaseWaitersAndUnlockQueue();
-            }
-
-            return isFirst ? spinCount : 0;
-        }
-
-		//
-		// Waits until acquire the specified number of permits, activating
-        // the specified cancellers.
-        //
-
-		public bool Wait(int acquireCount, StCancelArgs cargs) {
-
-            //
-            // Validate the "acquireCount" argument.
-            //
-
-            if (acquireCount <= 0 || acquireCount > maximumCount) {
-                throw new ArgumentException("acquireCount");
-            }
-
-			//
-            // Try to acquire the specified permits and, if succeed,
-            // return success.
-			//
-
-            if (TryAcquireInternal(acquireCount)) {
-                return true;
-            }
-
-			//
-			// Return failure if a null timeout was specified.
-			//
-
-            if (cargs.Timeout == 0) {
-                return false;
-            }
-
-			//
-			// Create a wait block and insert it in the semaphore's queue.
-            //
-
-            WaitBlock wb = new WaitBlock(WaitType.WaitAny, acquireCount);
-            int sc = EnqueueAcquire(wb, acquireCount);
-
-            //
-			// Park the current thread, activating the specified cancellers and
-            // spinning, if appropriate.
-			//
-
-			int ws = wb.parker.Park(sc, cargs);
-
-            //
-            // if we acquired the requested permits, return success.
-            //
-
-            if (ws == StParkStatus.Success) {
-                return true;
-            }
-
-			//
-			// The request was cancelled; so, cancel the acquire attempt
-            // and report the failure appropriately.
-			//
-
-			CancelAcquire(wb);
-            StCancelArgs.ThrowIfException(ws);
-            return false;
-		}
-
-		//
-		// Waits unconditionally until acquire the specified number
-        // of permits.
-        //
-
-		public void Wait(int acount) {
-		    Wait(acount, StCancelArgs.None);
-        }
-        
-        //
-		// Releases the specified number permits.
-		//
-
-		public int Release(int rcount) {
-
-            if (rcount < 1) {
-                throw new ArgumentOutOfRangeException("\"rcount\" must be positive");
-            }
-
-			//
-			// Upadate the semaphore's state and if there are waiters
-            // that can be released, execute the release processing.
-			//
-
-            int prevCount = state;
-            if (!ReleaseInternal(rcount)) {
-                throw new StSemaphoreFullException();
-            }
-            if (IsReleasePending) {
-                ReleaseWaitersAndUnlockQueue();
-            }
-            return prevCount;
-		}
-		
-		/*++
-		 * 
-		 * Virtual methods that support the waitable functionality.
-		 * 
-		 --*/
-
-        //
-        // Returns true if at least one permit is available.
-        //
-
-        internal override bool _AllowsAcquire {
-            get { return (state != 0 && queue.IsEmpty); }
-        }
-
-        //
-        // Tries to acquire one permit.
-        //
-
-        internal override bool _TryAcquire() {
-            return TryAcquireInternal(1);            
-        }
-
-        //
-        // Releases one permit.
-        //
-
-        internal override bool _Release() {
-            if (!ReleaseInternal(1)) {
-                return false;
-            }
-            if (IsReleasePending) {
-                ReleaseWaitersAndUnlockQueue();
-            }
-            return true;
-        }
-
-        //
-        // Executes the prologue of the Waitable.WaitAny method.
-        //
-
-        internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
-                                                     ref WaitBlock ignored, ref int sc) {
-            if (TryAcquireInternal(1)) {
-                return null;
-			}
-
-			var  wb = new WaitBlock(pk, WaitType.WaitAny, 1, key);
-            sc = EnqueueAcquire(wb, 1);
-			return wb;
-		}
-
-        //
-        // Executes the prologue of the Waitable.WaitAll method.
-        //        
-        
-        internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock ignored,
-                                                     ref int sc) {
-            if (_AllowsAcquire) {
-                return null;
-			}
-
-			var wb = new WaitBlock(pk, WaitType.WaitAll, 1, StParkStatus.StateChange);
-            sc = EnqueueAcquire(wb, 1);
-            return wb;
-		}
-
-        //
-        // Undoes a waitable acquire operation.
-        //
-
-        internal override void _UndoAcquire() {
-            UndoAcquire(1);
-            if (IsReleasePending) {
-                ReleaseWaitersAndUnlockQueue();
-            }
-        }
-
-        //
-        // Cancels the specified acquire attempt.
-        //
-
-        internal override void _CancelAcquire(WaitBlock wb, WaitBlock ignored) {
-            CancelAcquire(wb);
-        }
-
-        //
-        // Return the exception that must be thrown when the signal
-        // operation fails.
-        //
-
-        internal override Exception _SignalException {
-            get { return new StSemaphoreFullException(); }
         }
 	}
 }

@@ -153,7 +153,7 @@ namespace TestShared {
 
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 VConsole.WriteLine("++++ Total: {0}", synchs);
             };
             return stop;

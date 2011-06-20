@@ -245,7 +245,7 @@ namespace SlimThreading {
                     pv = p;
                     p = p.next;
                 }
-                throw new InvalidOperationException("Wait node not found in the queue!");
+                throw new InvalidOperationException("WaitOne node not found in the queue!");
             }
 
             /*++

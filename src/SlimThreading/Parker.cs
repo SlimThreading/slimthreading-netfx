@@ -185,7 +185,7 @@ namespace SlimThreading {
             } while (true);
 
             if (parkSpot == null) {
-                parkSpot = ThreadExtensions.ParkSpotFactory.Create();
+                parkSpot = ThreadExtensions.ForCurrentThread.ParkSpotFactory.Create();
             }
 
             //

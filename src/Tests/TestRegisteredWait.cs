@@ -64,7 +64,7 @@ namespace TestShared {
 
             private void Run() {
 	            Console.WriteLine("+++unregister thread starts...");
-                doUnreg.Wait();
+                doUnreg.WaitOne();
                 if (regWait.Unregister()) {
                     Console.WriteLine("+++ WAIT successful unregistered");
                 } else {

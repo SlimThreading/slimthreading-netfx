@@ -1,4 +1,4 @@
-﻿// Copyright 2011 Carlos Martins
+﻿// Copyright 2011 Carlos Martins, Duarte Nunes
 // 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //  
-using System;
+
 using System.Threading;
 
 #pragma warning disable 0420
@@ -135,11 +135,6 @@ namespace SlimThreading {
     //
 
     internal struct LockedWaitQueue {
-
-        //
-        // The head and tail of the queue.
-        //
-
         internal volatile WaitBlock head;
         internal volatile WaitBlock tail;
 
@@ -152,38 +147,24 @@ namespace SlimThreading {
         private const int BUSY = 1;
         private volatile int qlock;
 
-        //
-        // Initializes the queue.
-        //
-
         internal void Init() {
             head = tail = new WaitBlock();
         }
 
         //
-        // Advances the queue's head.
+        // If the queue is not locked, returns the wait block that
+        // is at the front of the queue; otherwise, returns always null.
         //
 
-        private bool AdvanceHead(WaitBlock h, WaitBlock nh) {
-            if (head == h && Interlocked.CompareExchange<WaitBlock>(ref head, nh, h) == h) {
-                h.next = h;     // Mark the previous head's wait block as unlinked.
-                return true;
-            }
-            return false;
+        internal WaitBlock First {
+            get { return qlock == FREE ? head.next : null; }
         }
 
-        //
-        // Advances the queue's tail.
-        //
+        internal bool IsEmpty { get { return head.next == null; } }
 
-        private bool AdvanceTail(WaitBlock t, WaitBlock nt) {
-            return (tail == t && Interlocked.CompareExchange<WaitBlock>(ref tail, nt, t) == t);
+        internal bool TryLock() {
+            return qlock == FREE && Interlocked.CompareExchange(ref qlock, BUSY, FREE) == FREE;
         }
-
-        //
-        // Enqueues the specified wait block and returns its
-        // predecessor.
-        //
 
         internal bool Enqueue(WaitBlock wb) {
             do {
@@ -209,42 +190,15 @@ namespace SlimThreading {
                 if (t.CasNext(null, wb)) {
 
                     //
-                    // Enqueue succeed; So, try to swing tail to the inserted
-                    // wait block and return.
+                    // Enqueue succeed; So, try to swing the tail to the
+                    // inserted wait block and return.
                     //
 
                     AdvanceTail(t, wb);
-                    return (t == head);
+                    return t == head;
                 }
             } while (true);
         }
-
-        //
-        // If the queue is not locked, returns the wait block that
-        // is at the front of the queue; otherwise, returns always null.
-        //
-
-        internal WaitBlock First {
-            get { return (qlock == FREE) ? head.next : null; }
-        }
-
-        //
-        // Returns true if the waiting queue seems empty.
-        //
-
-        internal bool IsEmpty { get { return head.next == null; } }
-
-        //
-        // Tries to lock the queue if it is free.
-        //
-
-        internal bool TryLock() {
-            return (qlock == FREE && Interlocked.CompareExchange(ref qlock, BUSY, FREE) == FREE);
-        }
-
-        //
-        // Sets the new head and unlocks the queue.
-        //
 
         internal void SetHeadAndUnlock(WaitBlock nh) {
 
@@ -258,7 +212,7 @@ namespace SlimThreading {
                 if ((w = nh.next) == null || !w.parker.IsLocked || w.request < 0) {
                     break;
                 }
-                nh.next = nh;   // Mark old head's wait block as unlinked.
+                nh.next = nh;   // Mark old head wait block as unlinked.
                 nh = w;
             } while (true);
 
@@ -270,10 +224,6 @@ namespace SlimThreading {
             head = nh;
             Interlocked.Exchange(ref qlock, FREE);
         }
-
-        //
-        // Unlinks the specified wait block.
-        //
 
         internal void Unlink(WaitBlock wb) {
             if (wb.next == wb || wb == head) {
@@ -304,6 +254,12 @@ namespace SlimThreading {
                 pv.next = n.next;
                 n.next = n;
             } while ((n = pv.next).next != null && n.parker.IsLocked);
+        }
+
+        private void AdvanceTail(WaitBlock t, WaitBlock nt) {
+            if (tail == t) {
+                Interlocked.CompareExchange(ref tail, nt, t);
+            }
         }
     }
 }

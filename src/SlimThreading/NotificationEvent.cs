@@ -13,7 +13,6 @@
 // limitations under the License.
 //  
 
-using System;
 using System.Threading;
 
 #pragma warning disable 0420
@@ -22,7 +21,7 @@ namespace SlimThreading {
 
     //
     // This value type implements a non-waitable notification event
-    // that is used internally by the Slim Threading library.
+    // that is used internally by the SlimThreading library.
     //
 
     internal struct NotificationEvent {
@@ -59,31 +58,14 @@ namespace SlimThreading {
         internal NotificationEvent(bool initialState) 
             : this(initialState, 0) { }
 
-        //
-        // Returns true if the event is set.
-        //
-
         internal bool IsSet {
             get { return state == SET; }
         }
 
-        //
-        // Sets the event to the signalled state.
-        //
-
         internal bool Set() {
-
-            //
-            // If the event is already signalled, return true.
-            //
-
             if (state == SET) {
                 return true;
             }
-
-            //
-            // Atomically signal the event and grab the wait queue.
-            //
 
             WaitBlock p = Interlocked.Exchange(ref state, SET);
 
@@ -95,6 +77,8 @@ namespace SlimThreading {
                 return p == SET;
             }
 
+            StParker pk;
+
             //
             // If spinning is configured and there is more than one thread in the
             // wait queue, we first release the thread that is spinning. As only 
@@ -103,15 +87,24 @@ namespace SlimThreading {
             //
 
             if (spinCount != 0 && p.next != null) {
-                p.RemoveLast().TryLockAndUnpark();
+                WaitBlock pv = p;
+                WaitBlock n;
+
+                while ((n = pv.next).next != null) {
+                    pv = n;
+                }
+
+                pv.next = null;
+
+                if ((pk = n.parker).TryLock()) {
+                    pk.Unpark(n.waitKey);
+                }
             }
 
-            //
-            // Lock and unpark all waiting threads.
-            //
-
             do {
-                p.TryLockAndUnpark();
+                if ((pk = p.parker).TryLock()) {
+                    pk.Unpark(p.waitKey);
+                }
             } while ((p = p.next) != null);
 
             //
@@ -153,10 +146,6 @@ namespace SlimThreading {
             return ws;
         }
 
-        //
-        // Waits until the event is signalled, using the specified parker object.
-        //
-
         internal WaitBlock WaitWithParker(StParker pk, WaitType type, int key, ref int sc) {
             WaitBlock wb = null;
             do {
@@ -177,10 +166,6 @@ namespace SlimThreading {
             } while (true);
         }
 
-        //
-        // Unlinks the wait block from the event's wait queue.
-        //
-
         internal void Unlink(WaitBlock wb) {
 
             //
@@ -195,10 +180,6 @@ namespace SlimThreading {
             }
             SlowUnlink(wb);
         }
-
-        //
-        // Slow path to unlink the wait block from the event's wait queue.
-        //
 
         void SlowUnlink(WaitBlock wb) {
             WaitBlock next;
@@ -233,287 +214,25 @@ namespace SlimThreading {
         protected StNotificationEventBase(bool initialState) 
             : this(initialState, 0) { }
 
-        //
-        // Waits until the event is signalled, activating the specified cancellers.
-        //
-
-        public bool Wait(StCancelArgs cargs) {
-            int ws = waitEvent.Wait(cargs);
-            if (ws == StParkStatus.Success) {
-                return true;
-            }
-            
-            StCancelArgs.ThrowIfException(ws);
-            return false;
-        }
-
-        public void Wait() {
-            Wait(StCancelArgs.None);
-        }
-
-        //
-        // Returns true if the event is signalled.
-        //
-
         internal override bool _AllowsAcquire {
             get { return waitEvent.IsSet; }
         }
 
-        //
-        // Returns true if the event is signalled.
-        //
-
         internal override bool _TryAcquire() {
             return waitEvent.IsSet;
         }
-
-        //
-        // Executes the prologue of the Waitable.WaitAny method.
-        //
 
         internal override WaitBlock _WaitAnyPrologue(StParker pk, int key,
                                                      ref WaitBlock hint, ref int sc) {
             return waitEvent.WaitWithParker(pk, WaitType.WaitAny, key, ref sc);
         }
 
-        //
-        // Executes the prologue of the Waitable.WaitAll method.
-        //
-
         internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock hint, ref int sc) {
             return waitEvent.WaitWithParker(pk, WaitType.WaitAll, StParkStatus.StateChange, ref sc);
         }
-
-        //
-        // Cancels the specified acquire attempt.
-        //
-
+        
         internal override void _CancelAcquire(WaitBlock wb, WaitBlock ignored) {
             waitEvent.Unlink(wb);
-        }
-
-        /*++
-         * 
-         * Specialized WaitAny and WaitAll methods.
-         * 
-         --*/
-
-        /// <summary>
-        /// Waits until one of the specified events is signalled, activating the
-        /// specified cancellers. 
-        /// </summary>
-        /// <param name="evs">The array of events.</param>
-        /// <param name="cargs">The cancellation arguments.</param>
-        /// <returns>True if the wait succeed; false if timeout expired.</returns>
-        public static int WaitAny(StNotificationEventBase[] evs, StCancelArgs cargs) {
-
-            //
-            // Validate the parameters.
-            //
-            // NOTE: We support null references on the *evs* array, provided
-            //		 that the array contains at least a non-null entry.
-            //
-
-            int len = evs.Length;
-            int def = 0;
-
-            //
-            // First, we scan the *evs* array checking is any of the specified
-            // latches is open and computing the number of non-null references.
-            //
-
-            for (int i = 0; i < len; i++) {
-                StNotificationEventBase ev = evs[i];
-                if (ev != null) {
-                    if (ev.waitEvent.IsSet) {
-
-                        //
-                        // The current event is signalled, so return success.
-                        //
-
-                        return i;
-                    }
-                    def++;
-                }
-            }
-
-            //
-            // If the *evs* array doesn't contain any non-null references,
-            // throw ArgumentOutOfRangeException.
-            //
-
-            if (def == 0) {
-                throw new ArgumentOutOfRangeException("evs", "The array is empty");
-            }
-
-            //
-            // None of the specified events is signalled; so, return failure
-            // if a null timeout was specified.
-            //
-
-            if (cargs.Timeout == 0) {
-                return StParkStatus.Timeout;
-            }
-
-            //
-            // Create a parker and execute the WaitPrologueWorker on all
-            // events. We stop executing wait prologues as soon as we detect
-            // that a latch is open.
-            // 
-
-            StParker pk = new StParker(1);
-            WaitBlock[] wbs = new WaitBlock[len];
-            int lv = -1;
-            int sc = 0, gsc = 0;
-            for (int i = 0; !pk.IsLocked && i < len; i++) {
-                StNotificationEventBase ev = evs[i];
-                if (ev != null) {
-                    if ((wbs[i] = ev.waitEvent.WaitWithParker(pk, WaitType.WaitAny, i, ref sc)) == null) {
-                        break;
-                    }
-
-                    //
-                    // Adjust the global spin count.
-                    //
-
-                    if (gsc < sc) {
-                        gsc = sc;
-                    }
-                    lv = i;
-                }
-            }
-
-            //
-            // Park the current thread, activating the specified cancellers
-            // and spinning if appropriate.
-            //
-
-            int ws = pk.Park(gsc, cargs);
-
-            //
-            // Cancel the acquire attempt on all events where we executed the
-            // wait prologue except the one where the we were woken.
-            //
-
-            for (int i = 0; i <= lv; i++) {
-                if (i != ws) {
-                    StNotificationEventBase ev;
-                    if ((ev = evs[i]) != null) {
-                        ev.waitEvent.Unlink(wbs[i]);
-                    }
-                }
-            }
-
-            //
-            // If the WaitAny succeed, return success.
-            //
-
-            if (ws >= StParkStatus.Success && ws < len) {
-                return ws;
-            }
-
-            //
-            // The WaitAny failed, so report the failure appropriately.
-            //
-
-            StCancelArgs.ThrowIfException(ws);
-            return StParkStatus.Timeout;
-        }
-
-        /// <summary>
-        /// Waits until all the specified events are signalled, activating the
-        /// specified cancellers.
-        /// </summary>
-        /// <param name="evs"></param>
-        /// <param name="cargs"></param>
-        /// <returns>True if the wait succeed; false if timeout expired.</returns>
-        public static bool WaitAll(StNotificationEventBase[] evs, StCancelArgs cargs) {
-            int len = evs.Length;
-            int idx;
-
-            for (idx = 0; idx < len; idx++) {
-                StNotificationEventBase ev = evs[idx];
-                if (ev == null) {
-                    throw new ArgumentNullException();
-                }
-                if (!ev.waitEvent.IsSet) {
-                    break;
-                }
-            }
-
-            if (idx == len) {
-                return true;
-            }
-
-            //
-            // If the WaitAll can't be satisfied immediately and a null timeout was
-            // specified, return failure.
-            //
-
-            if (cargs.Timeout == 0) {
-                return false;
-            }
-                
-            //
-            // Create the wait block array and create a parker for cooperative release,
-            // specifying as many releasers as the number of events.
-            //
-
-            WaitBlock[] wbs = new WaitBlock[len];
-            StParker pk = new StParker(len);
-
-            //
-            // Execute the WaitPrologueWorker on all events.
-            //
-
-            int sc = 0, gsc = 1;
-            for (int i = 0; i < len; i++) {
-                if ((wbs[i] = evs[i].waitEvent.WaitWithParker(pk, WaitType.WaitAll,
-                                                  StParkStatus.StateChange, ref sc)) != null) {
-
-                    //
-                    // Adjust the global spin count.
-                    //
-
-                    if (gsc != 0) {
-                        if (sc == 0) {
-                            gsc = 0;
-                        } else if (sc > gsc) {
-                            gsc = sc;
-                        }
-                    }
-                }
-            }
-
-            //
-            // Park the current thread, activating the specified cancellers
-            // and spinning, if appropriate.
-            //
-
-            int ws = pk.Park(gsc, cargs);
-
-            //
-            // If all events are signalled, return success.
-            //
-
-            if (ws == StParkStatus.StateChange) {
-                return true;
-            }
-
-            //
-            // The wait was cancelled due to timeout, alert or thread interruption,
-            // unlink the wait blocks on events where we actually inserted one.
-            //
-
-            for (int i = 0; i < len; i++) {
-                WaitBlock wb = wbs[i];
-                if (wb != null) {
-                    evs[i].waitEvent.Unlink(wb);
-                }
-            }
-
-            StCancelArgs.ThrowIfException(ws);
-            return false;
         }
     }
 
@@ -546,10 +265,6 @@ namespace SlimThreading {
         public bool Reset() {
             return waitEvent.Reset();
         }
-
-        //
-        // Signals the event.
-        //
 
         internal override bool _Release() {
             waitEvent.Set();

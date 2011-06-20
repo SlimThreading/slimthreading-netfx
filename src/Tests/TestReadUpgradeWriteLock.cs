@@ -246,7 +246,7 @@ namespace TestShared {
             }
             Action stop = () => {
                 shutdown.Set();
-                done.Wait();
+                done.WaitOne();
                 VConsole.WriteLine("+++ stop completed!");
             };
             return stop;

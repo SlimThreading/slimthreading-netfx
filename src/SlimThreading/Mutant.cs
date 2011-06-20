@@ -72,38 +72,9 @@ namespace SlimThreading {
                    Interlocked.CompareExchange(ref head.next, null, SET) == SET;
         }
 
-        protected bool Acquire(StCancelArgs cargs) {
-            if (_TryAcquire()) {
-                return true;
-            }
-
-            if (cargs.Timeout == 0) {
-                return false;
-            }
-
-            WaitBlock pred;
-            var wb = new WaitBlock(WaitType.WaitAny, ACQUIRE);
-
-            do {
-                if (EnqueueWaiter(wb, out pred)) {
-                    break;
-                }
-
-                if (_TryAcquire()) {
-                    return true;
-                }
-            } while (true);
-
-            int ws = wb.parker.Park(head == pred ? spinCount : 0, cargs);
-
-            if (ws == StParkStatus.Success) {
-                return true;
-            }
-
-            Unlink(wb, pred);
-            StCancelArgs.ThrowIfException(ws);
-            return false;
-        } 
+        internal override void _UndoAcquire() {
+            Release();
+        }
 
         //
         // Releases the mutant and returns its previous state (true
@@ -207,16 +178,8 @@ namespace SlimThreading {
             } while (true);
         }
 
-        internal override void _UndoAcquire() {
-            Release();
-        }
-
         internal override void _CancelAcquire(WaitBlock wb, WaitBlock hint) {
-            Unlink(wb, hint);
-        }
-        
-        private void Unlink(WaitBlock wb, WaitBlock pred) {
-            while (pred.next == wb) {
+            while (hint.next == wb) {
 
                 //
                 // Remove the cancelled wait blocks that are at the front
@@ -259,7 +222,7 @@ namespace SlimThreading {
 
                 if (wb != t) {
                     WaitBlock wbn;
-                    if ((wbn = wb.next) == wb || pred.CasNext(wb, wbn)) {
+                    if ((wbn = wb.next) == wb || hint.CasNext(wb, wbn)) {
                         return;
                     }
                 }
@@ -276,10 +239,10 @@ namespace SlimThreading {
                         ((dn = d.next) != null && dp.CasNext(d, dn))) {
                         CasToUnlink(dp, null);
                     }
-                    if (dp == pred) {
+                    if (dp == hint) {
                         return;             // *wb* is an already the saved node.
                     }
-                } else if (CasToUnlink(null, pred)) {
+                } else if (CasToUnlink(null, hint)) {
                     return;
                 }
             }
