@@ -54,6 +54,10 @@ namespace SlimThreading {
 
         private volatile StParker state;
 
+        public bool IsInitializationPerformed {
+            get { return state == AVAILABLE; }
+        }
+
         //
         // Acquires the init once lock. Returns true to signal that the current
         // thread must perform the initialization or false which means that the 
@@ -136,11 +140,6 @@ namespace SlimThreading {
                     break;
                 }
             } while (true);
-
-            //
-            // Park the current thread and, after release, return the
-            // appropriate value.
-            //
 
             return pk.Park() == STATUS_INIT;
         }
