@@ -13,8 +13,6 @@
 // limitations under the License.
 //  
 
-using System;
-
 namespace SlimThreading {
 
     //
@@ -61,7 +59,7 @@ namespace SlimThreading {
             EnsureIsOwned();
 
             WaitBlock w;        
-            while ((w = queue.Dequeue()) != null && !TryEnqueue(w)) ;
+            while ((w = queue.Dequeue()) != null && !TryEnqueue(w)) { }
 		}
 
 		//
@@ -135,70 +133,4 @@ namespace SlimThreading {
             return false;
         }
 	}
-
-    //
-    // A non-thread-safe queue of wait blocks.
-    //
-
-    internal struct WaitBlockQueue {
-        internal WaitBlock head;
-        private WaitBlock tail;
-
-        internal void Enqueue(WaitBlock wb) {
-            if (head == null) {
-                head = wb;
-            } else {
-                tail.next = wb;
-            }
-            tail = wb;
-        }
-
-        internal WaitBlock Dequeue() {
-            WaitBlock wb;
-            if ((wb = head) == null) {
-                return null;
-            }
-
-            if ((head = wb.next) == null) {
-                tail = null;
-            }
-            return wb;
-        }
-
-        internal void Remove(WaitBlock wb) {
-
-            //
-            // Return immediately if the wait block has been unlinked.
-            //
-
-            if (wb.next == wb) {
-                return;
-            }
-
-            //
-            // Compute the previous wait block and perform the removal.
-            //
-
-            WaitBlock p = head;
-            WaitBlock pv = null;
-            while (p != null) {
-                if (p == wb) {
-                    if (pv == null) {
-                        if ((head = wb.next) == null) {
-                            tail = null;
-                        }
-                    } else {
-                        if ((pv.next = wb.next) == null)
-                            tail = pv;
-                    }
-                    wb.next = wb;
-                    return;
-                }
-                pv = p;
-                p = p.next;
-            }
-            
-            throw new InvalidOperationException();
-        }
-    }
 }

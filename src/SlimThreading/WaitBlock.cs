@@ -13,6 +13,7 @@
 // limitations under the License.
 //  
 
+using System;
 using System.Threading;
 
 #pragma warning disable 0420
@@ -126,6 +127,72 @@ namespace SlimThreading {
 
         internal bool CasNext(WaitBlock n, WaitBlock nn) {
             return (next == n && Interlocked.CompareExchange<WaitBlock>(ref next, nn, n) == n);
+        }
+    }
+
+    //
+    // A non-thread-safe queue of wait blocks.
+    //
+
+    internal struct WaitBlockQueue {
+        internal WaitBlock head;
+        private WaitBlock tail;
+
+        internal void Enqueue(WaitBlock wb) {
+            if (head == null) {
+                head = wb;
+            } else {
+                tail.next = wb;
+            }
+            tail = wb;
+        }
+
+        internal WaitBlock Dequeue() {
+            WaitBlock wb;
+            if ((wb = head) == null) {
+                return null;
+            }
+
+            if ((head = wb.next) == null) {
+                tail = null;
+            }
+            return wb;
+        }
+
+        internal void Remove(WaitBlock wb) {
+
+            //
+            // Return immediately if the wait block has been unlinked.
+            //
+
+            if (wb.next == wb) {
+                return;
+            }
+
+            //
+            // Compute the previous wait block and perform the removal.
+            //
+
+            WaitBlock p = head;
+            WaitBlock pv = null;
+            while (p != null) {
+                if (p == wb) {
+                    if (pv == null) {
+                        if ((head = wb.next) == null) {
+                            tail = null;
+                        }
+                    } else {
+                        if ((pv.next = wb.next) == null)
+                            tail = pv;
+                    }
+                    wb.next = wb;
+                    return;
+                }
+                pv = p;
+                p = p.next;
+            }
+            
+            throw new InvalidOperationException();
         }
     }
 

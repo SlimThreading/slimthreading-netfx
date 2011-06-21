@@ -48,7 +48,7 @@ namespace SlimThreading {
 
         void IMonitorLock.Reenter(int waitStatus, int ignored) {
             
-            //
+            // 
             // If the wait on the condition variable was successful, the lock is
             // owned by the current thread; otherwise, we must do a full acquire.
             //
