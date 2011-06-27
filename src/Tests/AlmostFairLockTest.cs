@@ -18,10 +18,10 @@ using System.Threading;
 using SlimThreading;
 
 namespace Tests {
-    class TestLock {
+    public class AlmostFairLockTest {
         const int THREADS = 20;
 
-        static readonly StLock @lock = new StLock(100);
+        static readonly StAlmostFairLock @lock = new StAlmostFairLock (100);
         static readonly StAlerter shutdown = new StAlerter();
         static readonly StCountDownEvent done = new StCountDownEvent(THREADS);
         static readonly int[] counts = new int[THREADS];

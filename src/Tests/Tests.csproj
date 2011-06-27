@@ -37,6 +37,7 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AlmostFairLockTest.cs" />
     <Compile Include="Assert.cs" />
     <Compile Include="ExchangerAsyncTest.cs" />
     <Compile Include="ExchangerTest.cs" />
