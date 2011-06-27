@@ -161,21 +161,21 @@ namespace SlimThreading {
         internal override WaitBlock _WaitAllPrologue(StParker pk, ref WaitBlock hint,
                                                      ref int sc) {
             WaitBlock wb = null;
-            do {
-                if (_AllowsAcquire) {
-                    return null;
-                }
+            if (_AllowsAcquire) {
+                return null;
+            }
                 
-                if (wb == null) {
-                    wb = new WaitBlock(pk, WaitType.WaitAll, ACQUIRE, StParkStatus.StateChange);
-                }
+            if (wb == null) {
+                wb = new WaitBlock(pk, WaitType.WaitAll, ACQUIRE, StParkStatus.StateChange);
+            }
 
-                WaitBlock pred;
-                if (EnqueueWaiter(wb, out pred)) {
-                    sc = ((hint = pred) == head) ? spinCount : 0;
-                    return wb;
-                }
-            } while (true);
+            WaitBlock pred;
+            if (EnqueueWaiter(wb, out pred)) {
+                sc = ((hint = pred) == head) ? spinCount : 0;
+                return wb;
+            }
+
+            return null;
         }
 
         internal override void _CancelAcquire(WaitBlock wb, WaitBlock hint) {
